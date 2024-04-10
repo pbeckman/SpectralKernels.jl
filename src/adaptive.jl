@@ -17,7 +17,7 @@ Base.@kwdef struct AdaptiveKernelConfig{S}
 end
 
 function AdaptiveKernelConfig(sdf::S; 
-  tol::Float64=1e-10, convergence_criteria=:both, p=0.0, tail=nothing, logw=false, 
+  tol::Float64=1e-10, convergence_criteria::Symbol=:both, p=0.0, tail=nothing, logw=false, 
   quadspec::Tuple{Int64, Int64}=(2^12, 2^4)) where{S}
 
   if !(convergence_criteria in [:panel, :tails, :both]) 
