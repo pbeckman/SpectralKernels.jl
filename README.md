@@ -62,7 +62,7 @@ AdaptiveKernelConfig(
 ```
 
 `tol` : pointwise error tolerance $|K(r) -
-\widetilde{K}(r)|\,/\,K(0) < \varepsilon$
+\widetilde{K}(r)| \ / \ K(0) < \varepsilon$
 
 `convergence_criteria` :
 
