@@ -3,9 +3,9 @@
 This package uses adaptive Gaussian quadrature accelerated by the nonuniform
 fast Fourier transform (NUFFT) to compute Fourier transforms of continuous,
 integrable functions. In the Gaussian process context for which this code is
-designed, given a positive spectral density $S(\omega)$, we wish to
-compute the corresponding covariance function given by its inverse Fourier transform
-$$ K(r) := \int_{-\infty}^\infty S(\omega) e^{2\pi i\omega r} \, d\omega $$
+designed, given a positive spectral density $S(\omega)$, we wish to compute the
+corresponding covariance function given by its inverse Fourier transform 
+$$ K(r) := \int_{-\infty}^\infty S(\omega) e^{2\pi i\omega r} \, d\omega $$ 
 at a set of distances $r_1, \dots, r_n$.
 
 A minimal demo is as follows:
