@@ -1,5 +1,5 @@
 
-using SpectralKernels, Printf, ForwardDiff, LinearAlgebra, Plots
+using SpectralKernels, Printf, ForwardDiff, LinearAlgebra, Plots, LaTeXStrings
 include("matern_pair.jl")
 
 # singularity parameter (set to 0 for standard Matern)
@@ -38,14 +38,14 @@ const cfg = AdaptiveKernelConfig(
 
 # choose distances r at which to evaluate K
 n  = 1_000_000
-xs = 10 .^ range(-8, stop=-2, length=n) 
+rs = 10 .^ range(-8, stop=-2, length=n) 
 
 # adaptively compute kernel values
-@time K_fourier, err_est = kernel_values(cfg, xs, verbose=true);
+@time K_fourier, err_est = kernel_values(cfg, rs, verbose=true);
 
 # compute analytic kernel values, but beware that K (not S) is unstable 
 # for p ≠ 0 at even moderate r
-K_true   = K.(xs)
+K_true   = K.(rs)
 err_true = K_true - K_fourier
 
 @printf("\naverage absolute error: %.2e\n", sum(abs.(err_true)) / n)
@@ -53,25 +53,28 @@ err_true = K_true - K_fourier
 
 # skip points when plotting many points to avoid slowness
 sk = ceil(Int64, n/200)
-gr(size=(1000,1000))
+gr(size=(600,600))
 default(fontfamily="Computer Modern")
-Plots.scalefontsizes()
-Plots.scalefontsizes(1.5)
+if alpha == 0
+    title = @sprintf("Standard Matérn covariance\nρ = %.1f, ν = %.1f, α = %.1f, ε = %.0e", parms[2], parms[3], alpha, tol)
+else 
+    title = @sprintf("Singular Matérn covariance\nρ = %.1f, ν = %.1f, α = %.1f, ε = %.0e", parms[2], parms[3], alpha, tol)
+end
 pl = plot(
-    title=@sprintf(
-        "ν = %.2f, α = %.1f, tol = %.1e", 
-        parms[3], alpha, tol
-        ),
+    title=title,
     legend=:bottomright,
     dpi=200,
     yscale=:log10, 
     xscale=:log10, 
-    xlabel="x", ylims=[1e-16, 1e0]
+    xlabel=L"r", 
+    ylabel=L"Absolute error in $K(r)$",
+    ylims=[1e-16, 1e0],
+    yticks=10.0 .^ (-14:4:-2)
     )
 plot!(pl,
-    xs[1:sk:end], 
+    rs[1:sk:end], 
     abs.(err_est[1:sk:end]),
-    label="absolute error estimate", 
+    label="estimate", 
     linestyle=:dash, 
     linecolor=:red,
     linealpha=0.3,
@@ -81,14 +84,14 @@ plot!(pl,
     markershape=:circle
     )
 plot!(pl,
-    xs[1:sk:end], 
+    rs[1:sk:end], 
     abs.(err_true[1:sk:end]),
-    label="absolute error", 
+    label="true", 
     linestyle=:solid, linealpha=0.2,
     c=:blue, alpha=0.7, marker=2, markerstrokewidth=0
     )
 plot!(pl,
-    [extrema(xs)...], 
+    [extrema(rs)...], 
     [tol, tol],
     label="tolerance", linestyle=:dash, linewidth=2, c=:blue
     )
