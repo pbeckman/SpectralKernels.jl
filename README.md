@@ -69,14 +69,14 @@ AdaptiveKernelConfig(
 
 ## Singular spectral densities
 
-One can also compute covariance functions corresponding to spectral densities
+One can also use this package to compute covariance functions corresponding to spectral densities
 with power law singularities at the origin
 ```math
 K_\alpha(r) 
-:= 2\int_0^\infty |\omega|^{-\alpha} S(\omega) \cos(2\pi\omega r) \, d\omega,
+:= 2\int_0^\infty |\omega|^{-\alpha} S(\omega) \cos(2\pi\omega r) \, d\omega
 ```
 for any bounded integrable $S$, where $0 \leq \alpha < 1$ is necessary for
 integrability. The resulting covariance functions decay like $r^{-1+\alpha}$ for
 sufficiently large $r$, yielding so-called *long-memory* processes.
 
-Simply provide the argument `alpha::Float64`{:.julia} to the `AdaptiveKernelConfig` constructor.
+Simply provide the `alpha` keyword argument to the `AdaptiveKernelConfig` constructor.
