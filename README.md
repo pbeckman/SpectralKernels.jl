@@ -79,4 +79,4 @@ for any bounded integrable $S$, where $0 \leq \alpha < 1$ is necessary for
 integrability. The resulting covariance functions decay like $r^{-1+\alpha}$ for
 sufficiently large $r$, yielding so-called *long-memory* processes.
 
-Simply provide the argument `alpha::Float64`{.julia} to the `AdaptiveKernelConfig` constructor.
+Simply provide the argument `alpha::Float64`{:.julia} to the `AdaptiveKernelConfig` constructor.
