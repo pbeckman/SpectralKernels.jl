@@ -20,8 +20,7 @@ A minimal demo is as follows:
 using SpectralKernels
 
 # distances r at which to evaluate K
-n  = 1_000_000
-rs = 10 .^ range(-6, stop=0, length=n) 
+rs = 10 .^ range(-6, stop=0, length=1000) 
 
 # specify an integrable spectral density
 S(w) = (1 + w^2)^(-2)
@@ -50,8 +49,8 @@ on an 8-core laptop.
 
 ## Configuration options
 
-In order to tune accuracy and speed, the `AdaptiveKernelConfig` object accepts
-a number of keyword arguments with the following defaults
+In order to tune accuracy and speed, the `AdaptiveKernelConfig` object accepts a
+number of keyword arguments with the following defaults
 ```julia
 AdaptiveKernelConfig(
     S; 
@@ -61,12 +60,23 @@ AdaptiveKernelConfig(
     )
 ```
 
-`tol` : pointwise error tolerance $|K(r) -
-\widetilde{K}(r)| \ / \ K(0) < \varepsilon$
+`tol` : pointwise error tolerance $|K(r) - \widetilde{K}(r)| \ / \ K(0) <
+\varepsilon$
 
-`convergence_criteria` :
+`convergence_criteria` : 
 
 `quadspec` :
 
 ## Singular spectral densities
 
+One can also compute covariance functions corresponding to spectral densities
+with power law singularities at the origin
+```math
+K_\alpha(r) 
+:= 2\int_0^\infty |\omega|^{-\alpha} S(\omega) \cos(2\pi\omega r) \, d\omega,
+```
+for any bounded integrable $S$, where $0 \leq \alpha < 1$ is necessary for
+integrability. The resulting covariance functions decay like $r^{-1+\alpha}$ for
+sufficiently large $r$, yielding so-called *long-memory* processes.
+
+Simply provide the argument `alpha::Float64`{.julia} to the `AdaptiveKernelConfig` constructor.
