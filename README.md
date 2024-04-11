@@ -54,23 +54,38 @@ number of keyword arguments with the following defaults
 ```julia
 AdaptiveKernelConfig(
     S; 
-    tol::Float64=1e-10, 
+    tol::Float64=1e-8, 
     convergence_criteria::Symbol=:both,
     quadspec::Tuple{Int64, Int64}=(2^12, 2^4)
     )
 ```
 
-`tol` : pointwise error tolerance $|K(r) - \widetilde{K}(r)| \ / \ K(0) <
-\varepsilon$
+### `tol` : error tolerance
 
-`convergence_criteria` : 
+The desired uniform pointwise accuracy $\varepsilon$ relative to the variance, i.e. $|K(r) - \widetilde{K}(r)| \ / \ K(0) < \varepsilon$
 
-`quadspec` :
+Our adaptive integration scheme typically gives `tol=1e-8` at essentially no
+additional cost over, say, `tol=1e-2`, so we generally don't recommend lowering
+the accuracy below the default.
+
+Ill-conditioning inherent in the NUFFT prevent the use of large quadrature rules
+for very high accuracies, e.g. `tol=1e-14`. If you request these accuracies,
+you'll receive a warning and the package will use a smaller (and slower)
+quadrature rule. This can have a drastic effect on runtimes, so we recommend not
+asking for more digits than you really need.
+
+### `convergence_criteria` : stopping criteria for adaptive integration
+
+...
+
+### `quadspec` : size of panel quadrature rule
+
+...
 
 ## Singular spectral densities
 
-One can also use this package to compute covariance functions corresponding to spectral densities
-with power law singularities at the origin
+One can also use this package to compute covariance functions corresponding to
+spectral densities with power law singularities at the origin
 ```math
 K_\alpha(r) 
 := 2\int_0^\infty |\omega|^{-\alpha} S(\omega) \cos(2\pi\omega r) \, d\omega
@@ -79,4 +94,5 @@ for any bounded integrable $S$, where $0 \leq \alpha < 1$ is necessary for
 integrability. The resulting covariance functions decay like $r^{-1+\alpha}$ for
 sufficiently large $r$, yielding so-called *long-memory* processes.
 
-Simply provide the `alpha` keyword argument to the `AdaptiveKernelConfig` constructor.
+Simply provide the `alpha` keyword argument to the `AdaptiveKernelConfig`
+constructor.
