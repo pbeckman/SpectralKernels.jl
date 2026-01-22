@@ -8,28 +8,22 @@ include("../../../SpectralKernels.jl/scripts/matern_pair.jl")
 d = 2
 
 # singularity parameter
-const alpha = 0.0
+const alpha = 1.9
 type = iszero(alpha) ? "nonsingular" : "singular"
 
 # Matern parameters lengthscale, smoothness
-parms_init = (1.0, 0.5 + alpha/2)
+parms_init = (1.0, 0.6789)
 
 function kernel(x, alpha, parms)
     if alpha == 0
         return matern_cov(x, parms, d=d)
     else
-        v, a, b = parms
-        return v * a^(-2b)*(2pi)^alpha / gamma(0.5 + b) * (
-            2^(2b+1)*pi^(2b)*(a*x)^(2b)*x^alpha*cos(b*pi+alpha*pi/2)*gamma(0.5+b)*gamma(-2b-alpha) * 
-            pFq((0.5+b,), (0.5+b + alpha/2, 1+b + alpha/2), a^2*pi^2*x^2) + 
-            (2pi)^(-alpha)*(a)^(-alpha)*gamma(b + alpha/2)*gamma(0.5 - alpha/2) * 
-            pFq((0.5-alpha/2,), (0.5, 1-b-alpha/2), a^2*pi^2*x^2)
-        )
+        return sing_matern_cov(x, -alpha, parms; d=d)
     end
 end
 
 # normalize so that K(0) = 1
-const parms = (inv(kernel(1e-200, alpha, (1.0, parms_init...))), parms_init...)
+const parms = (inv(kernel(1e-10, alpha, (1.0, parms_init...))), parms_init...)
 
 # set up Matern Fourier pair
 S(w) = matern_sdf(w, parms, d=d)
@@ -39,11 +33,13 @@ K(r) = kernel(r, alpha, parms)
 n  = 100
 rs = 10 .^ range(-8, stop=0, length=n)
 
-tols = [1e-4, 1e-8, 1e-12]
-gr(size=(1000,300))
+tols = [1e-12] # [1e-4, 1e-8, 1e-12]
+# gr(size=(1000,300))
+gr(size=(400,400))
 default(fontfamily="Computer Modern")
-pls  = Vector{Plots.Plot}(undef, 3)
-for (j, tol) in enumerate(tols)
+pls  = Vector{Plots.Plot}(undef, 1)
+j = 1; tol = tols[j];
+# for (j, tol) in enumerate(tols)
     # set up adaptive integration config if !(@isdefined cfg)
         cfg = AdaptiveKernelConfig(
             S,
@@ -93,7 +89,7 @@ for (j, tol) in enumerate(tols)
         label=L"$\varepsilon$", linestyle=:dash, linewidth=2, c=:black
         )
     pls[j] = pl
-end
+# end
 
 pl = plot(pls..., layout=grid(1,3), bottommargin=5mm)
 display(pl)

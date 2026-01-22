@@ -67,9 +67,9 @@ function kernel_values(config::AdaptiveKernelConfig{S},
     while L^(q-config.alpha) * abs(config.sdf(L)) > abs(config.sdf(0))/2
       L *= 2
     end
-    f(w) = (w*L)^(q-config.alpha) * (config.logw ? log(w*L) : 1) * config.sdf(w*L) * L
     k0, k0_err = m .* quadgk(
-      w -> f(w), 0, Inf, 
+      w -> (w*L)^(q-config.alpha) * (config.logw ? log(w*L) : 1) * config.sdf(w*L) * L, 
+      0, Inf, 
       atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
       )
   end
