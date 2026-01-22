@@ -175,7 +175,7 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose)
         @timeit TIMER "panel integral" begin
           (I1a, I2a) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
-            w -> config.sdf(w) + w*log(w)*ForwardDiff.derivative(config.sdf, w),
+            w -> config.sdf(w) + w*log(w)*config.dsdf(w),
             _a, _b, xs, dim=config.dim, p=-config.alpha
             )
           (I1b, I2b) = fourier_integrate_panel(
