@@ -156,12 +156,13 @@ function fourier_integrate_panel(buffers, legrule::QuadRule, jacrule::QuadRule, 
   (int1, int2)
 end
 
-function fourier_integrate_interval(a, b, config, xs, k0, verbose)
+function fourier_integrate_interval(a, b, integrand, config, xs, k0, verbose)
   m, q = (config.dim == 1) ? (2, 0) : (2pi, 1)
   intervalheap = config.splittingheap
   push!(intervalheap, (a, b, config.tol))
   I   = zeros(length(xs))
   err = zeros(length(xs))
+  (fun, dfun) = (integrand.f, integrand.df)
   while !isempty(intervalheap)
     # take a (sub-)interval:
     (_a, _b, _tol) = pop!(intervalheap)
@@ -171,16 +172,16 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose)
       if config.logw
         # use integration by parts to evaluate the Fourier integral with an
         # additional log(w) singularity
-        I0 = (_b)^(-config.alpha+1)*log(_b)*config.sdf(_b)*cos.(2pi*_b*xs)
+        I0 = (_b)^(-config.alpha+1)*log(_b)*fun(_b)*cos.(2pi*_b*xs)
         @timeit TIMER "panel integral" begin
           (I1a, I2a) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
-            w -> config.sdf(w) + w*log(w)*config.dsdf(w),
+            w -> fun(w) + w*log(w)*dfun(w),
             _a, _b, xs, dim=config.dim, p=-config.alpha
             )
           (I1b, I2b) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
-            w -> w*log(w)*config.sdf(w),
+            w -> w*log(w)*fun(w),
             _a, _b, xs, dim=config.dim, p=-config.alpha
             )
         end
@@ -191,7 +192,7 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose)
         @timeit TIMER "panel integral" begin
           (I1, I2) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
-            w -> config.sdf(w),
+            w -> fun(w),
             _a, _b, xs, dim=config.dim, p=q-config.alpha
             )
         end
@@ -201,7 +202,7 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose)
       @timeit TIMER "panel integral" begin
         (I1, I2) = fourier_integrate_panel(
           config.buffers, config.legrule, config.jacrule,
-          w -> w^(q-config.alpha) * (config.logw ? log(w) : 1) * config.sdf(w), 
+          w -> w^(q-config.alpha) * (config.logw ? log(w) : 1) * fun(w), 
           _a, _b, xs, dim=config.dim
           )
       end

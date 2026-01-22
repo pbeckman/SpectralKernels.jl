@@ -1,7 +1,8 @@
+
 module SpectralKernels
 
   using LinearAlgebra, Printf # stdlibs
-  using FastGaussQuadrature, FINUFFT, StaticArrays, ForwardDiff, QuadGK, FastHankelTransform # not stdlibs
+  using FastGaussQuadrature, FINUFFT, StaticArrays, QuadGK, FastHankelTransform # not stdlibs
   using TimerOutputs # not stdlibs
   import SpecialFunctions: gamma, sinint, expint, besselj0
 
@@ -12,6 +13,6 @@ module SpectralKernels
   include("utils.jl")
   include("quadrature.jl")
   include("adaptive.jl")
-  include("funcwrappers.jl")
 
 end 
+

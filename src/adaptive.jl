@@ -1,6 +1,5 @@
 
-Base.@kwdef struct AdaptiveKernelConfig{S}
-  sdf::S                        # spectral density function
+Base.@kwdef struct AdaptiveKernelConfig
   dim::Int64                    # dimension of isotropic sdf
   alpha::Float64                # origin power singularity |w|^{-α} * sdf(w)
   tol::Float64                  # relative tolerance
@@ -15,6 +14,11 @@ Base.@kwdef struct AdaptiveKernelConfig{S}
     Vector{Float64}, Vector{ComplexF64} 
     } 
   splittingheap::SplittingHeap  # heap of subintervals to be integrated
+end
+
+struct Integrand{S,dS}
+  f::S
+  df::dS
 end
 
 function AdaptiveKernelConfig(sdf::S; 
@@ -38,19 +42,23 @@ function AdaptiveKernelConfig(sdf::S;
     Vector{Float64}(undef,  m*k), Vector{ComplexF64}(undef,  m*k), 
     Vector{Float64}(undef, 2m*k), Vector{ComplexF64}(undef, 2m*k)
     )
-  AdaptiveKernelConfig{S}(
-    sdf, dim, alpha, tol, convergence_criteria, tail, logw, 
+  AdaptiveKernelConfig(
+    dim, alpha, tol, convergence_criteria, tail, logw, 
     quadspec, legrule, jacrule, buffers, SplittingHeap())
 end
 
 quadsz(ac::AdaptiveKernelConfig) = prod(ac.quadspec)
 
-function kernel_values(config::AdaptiveKernelConfig{S}, 
-                       xs::Vector{Float64}; verbose=false) where{S}
+function kernel_values(integrand::Integrand{S,dS},
+                       xs::AbstractVector{Float64},
+                       config::AdaptiveKernelConfig; verbose=false) where{S,dS}
   issorted(xs) || throw(error("locations must be provided in sorted order."))
   # allocate some full-length buffers to re-use throughout the main loop:
   (ks, errs) = (zeros(Float64, length(xs)) for _ in 1:2)
   highest_unconv_ix = length(xs)
+
+  # get the integrand and its derivative:
+  (fun, dfun) = (integrand.f, integrand.df)
 
   # initialize relavant constants and variables
   quadm     = quadsz(config)
@@ -64,12 +72,12 @@ function kernel_values(config::AdaptiveKernelConfig{S},
   # compute K(0) using QuadGK
   @timeit TIMER "K(0)" begin
     L = 1.0
-    while L^(q-config.alpha) * abs(config.sdf(L)) > abs(config.sdf(0))/2
+    while L^(q-config.alpha) * abs(fun(L)) > abs(fun(0))/2
       L *= 2
     end
+    f(w) = (w*L)^(q-config.alpha) * (config.logw ? log(w*L) : 1) * fun(w*L) * L
     k0, k0_err = m .* quadgk(
-      w -> (w*L)^(q-config.alpha) * (config.logw ? log(w*L) : 1) * config.sdf(w*L) * L, 
-      0, Inf, 
+      w -> f(w), 0, Inf, 
       atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
       )
   end
@@ -98,7 +106,7 @@ function kernel_values(config::AdaptiveKernelConfig{S},
     end
     # estimate tail power law prefactor and decay rate
     @timeit TIMER "estimate tail decay" begin
-      (c, d) = (conv_crit == :panel) ? (NaN, NaN) : estimate_tail_decay(config, a, b, d=config.tail)
+      (c, d) = (conv_crit == :panel) ? (NaN, NaN) : estimate_tail_decay(integrand, a, b, d=config.tail)
     end
     if (isnan(c) || isnan(d)) && (conv_crit != :panel)
       # if tail gives NaNs, it's probably because it decayed too fast, e.g. was
@@ -133,19 +141,21 @@ function kernel_values(config::AdaptiveKernelConfig{S},
   return (ks, errs)
 end
 
-function estimate_tail_decay(config, a, b; d=nothing)
+function estimate_tail_decay(integrand::Integrand, a, b; d=nothing)
+  # get the integrand and its derivative:
+  (fun, dfun) = (integrand.f, integrand.df)
   # number of points to fit on panel
   nf = 1000
   # choose some frequency points on the last panel to extrapolate from
   ws = range(a + (b-a), stop=b, length=nf)
   if isnothing(d)
     # linear least squares in log space to estimate d
-    tmp = log.(abs.(config.sdf.(ws)))
+    tmp = @. log(abs(fun(ws)))
     logc, d = [ones(nf) log.(ws)] \ tmp
   end
   d += -config.alpha
   # compute the least squares estimate for c
-  c = sum(ws.^(d - config.alpha) .* abs.(config.sdf.(ws))) / sum(ws.^(2d))
+  c = sum(ws.^(d - config.alpha) .* abs.(fun.(ws))) / sum(ws.^(2d))
   (c, d)
 end
 
