@@ -94,7 +94,8 @@ function updatequadbufs!(buffers, legrule::QuadRule, jacrule::QuadRule, f::F, a,
   (no1, buf1, no2, buf2)
 end
 
-function fourier_integrate_panel(buffers, legrule::QuadRule, jacrule::QuadRule, f, a, b, xs; p=0, save_quad=false)
+function fourier_integrate_panel(buffers, legrule::QuadRule, jacrule::QuadRule, f, a, b, xs; p=0, dim=1)
+  @show p
   check_subdivide_failure(a, b, xs)
   @timeit TIMER "update quadrature buffers" begin
     (no1, buf1, no2, buf2) = updatequadbufs!(
@@ -102,32 +103,50 @@ function fourier_integrate_panel(buffers, legrule::QuadRule, jacrule::QuadRule, 
       f, a, b, p=p
       )
   end
-  if save_quad
-    open("nodes.csv", "a") do file
-      write(file, join(no1, ", ") * "\n")
-    end
-    open("dists.csv", "a") do file
-      write(file, join(xs, ", ") * "\n")
-    end
-  end
   if nufft_quad_size_cutoff(length(no2), length(xs)) && length(xs) > 1
-    @timeit TIMER "FINUFFT call" begin
-      int1 = finufft1d3(no1, buf1, xs)
-      int2 = finufft1d3(no2, buf2, xs)
+    if dim == 1
+      @timeit TIMER "FINUFFT call" begin
+        int1 = finufft1d3(no1, buf1, xs)
+        int2 = finufft1d3(no2, buf2, xs)
+      end
+    else
+      @timeit TIMER "NUFHT call" begin
+        int1 = nufht(0, no1, buf1, 2pi*xs; tol=1e-15)
+        int2 = nufht(0, no2, buf2, 2pi*xs; tol=1e-15)
+      end
     end
   else
-    @timeit TIMER "direct Fourier summation" begin
-      xl   = length(xs)
-      int1 = zeros(ComplexF64, xl)
-      int2 = zeros(ComplexF64, xl)
-      for j in eachindex(xs)
-        @inbounds begin
-          xj = xs[j]
-          @simd for k in eachindex(no1)
-            int1[j] += buf1[k]*cispi(2*no1[k]*xj)
+    if dim == 1
+      @timeit TIMER "direct Fourier summation" begin
+        xl   = length(xs)
+        int1 = zeros(ComplexF64, xl)
+        int2 = zeros(ComplexF64, xl)
+        for j in eachindex(xs)
+          @inbounds begin
+            xj = xs[j]
+            @simd for k in eachindex(no1)
+              int1[j] += buf1[k]*cispi(2*no1[k]*xj)
+            end
+            @simd for k in eachindex(no2)
+              int2[j] += buf2[k]*cispi(2*no2[k]*xj)
+            end
           end
-          @simd for k in eachindex(no2)
-            int2[j] += buf2[k]*cispi(2*no2[k]*xj)
+        end
+      end
+    else
+      @timeit TIMER "direct Bessel summation" begin
+        xl   = length(xs)
+        int1 = zeros(Float64, xl)
+        int2 = zeros(Float64, xl)
+        for j in eachindex(xs)
+          @inbounds begin
+            xj = xs[j]
+            @simd for k in eachindex(no1)
+              int1[j] += buf1[k]*besselj0(2pi*no1[k]*xj)
+            end
+            @simd for k in eachindex(no2)
+              int2[j] += buf2[k]*besselj0(2pi*no2[k]*xj)
+            end
           end
         end
       end
@@ -137,7 +156,8 @@ function fourier_integrate_panel(buffers, legrule::QuadRule, jacrule::QuadRule, 
   (int1, int2)
 end
 
-function fourier_integrate_interval(a, b, config, xs, k0, verbose; save_quad=false)
+function fourier_integrate_interval(a, b, config, xs, k0, verbose)
+  m, q = (config.dim == 1) ? (2, 0) : (2pi, 1)
   intervalheap = config.splittingheap
   push!(intervalheap, (a, b, config.tol))
   I   = zeros(length(xs))
@@ -146,40 +166,43 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose; save_quad=fal
     # take a (sub-)interval:
     (_a, _b, _tol) = pop!(intervalheap)
     # now pick a rule and integrand based on p and where (_a, _b) is:
-    if _a == 0.0 && config.p != 0.0
+    if _a == 0.0 && q-config.alpha != 0.0
+      # TODO (pb 1/16/26) : implement log singularity for dim = 2
       if config.logw
         # use integration by parts to evaluate the Fourier integral with an
         # additional log(w) singularity
-        I0 = (_b)^(config.p+1)*log(_b)*config.sdf(_b)*cos.(2pi*_b*xs)
+        I0 = (_b)^(-config.alpha+1)*log(_b)*config.sdf(_b)*cos.(2pi*_b*xs)
         @timeit TIMER "panel integral" begin
           (I1a, I2a) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
             w -> config.sdf(w) + w*log(w)*ForwardDiff.derivative(config.sdf, w),
-            _a, _b, xs, p=config.p
+            _a, _b, xs, dim=config.dim, p=-config.alpha
             )
           (I1b, I2b) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
             w -> w*log(w)*config.sdf(w),
-            _a, _b, xs, p=config.p
+            _a, _b, xs, dim=config.dim, p=-config.alpha
             )
         end
-        I1 = (I0 .- real(I1a) .+ 2pi*xs .* imag.(I1b)) / (config.p+1)
-        I2 = (I0 .- real(I2a) .+ 2pi*xs .* imag.(I2b)) / (config.p+1)
+        I1 = (I0 .- real(I1a) .+ 2pi*xs .* imag.(I1b)) / (-config.alpha+1)
+        I2 = (I0 .- real(I2a) .+ 2pi*xs .* imag.(I2b)) / (-config.alpha+1)
       else
+        @show q, config.alpha, "Jacobi"
         @timeit TIMER "panel integral" begin
           (I1, I2) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
             w -> config.sdf(w),
-            _a, _b, xs, p=config.p
+            _a, _b, xs, dim=config.dim, p=q-config.alpha
             )
         end
       end
     else
+      @show q, config.alpha, "Legendre"
       @timeit TIMER "panel integral" begin
         (I1, I2) = fourier_integrate_panel(
           config.buffers, config.legrule, config.jacrule,
-          w -> w^config.p * (config.logw ? log(w) : 1) * config.sdf(w), 
-          _a, _b, xs, save_quad=save_quad
+          w -> w^(q-config.alpha) * (config.logw ? log(w) : 1) * config.sdf(w), 
+          _a, _b, xs, dim=config.dim
           )
       end
     end
@@ -203,6 +226,6 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose; save_quad=fal
     end
   end
   drain(intervalheap)
-  return (I, err)
+  return m .* (I, err)
 end
 

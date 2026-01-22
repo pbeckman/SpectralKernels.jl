@@ -1,5 +1,5 @@
 
-using SpectralKernels, Printf, ForwardDiff, LinearAlgebra, Plots, LaTeXStrings
+using SpectralKernels, Printf, LinearAlgebra, Plots, LaTeXStrings
 include("matern_pair.jl")
 
 # singularity parameter (set to 0 for standard Matern)
@@ -31,7 +31,7 @@ const quadspec = (2^8, 2^4)
 # set up adaptive integration config
 const cfg = AdaptiveKernelConfig(
     S, 
-    p=-alpha,
+    alpha=alpha,
     tol=tol,
     quadspec=quadspec
     )

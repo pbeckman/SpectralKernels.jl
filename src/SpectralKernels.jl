@@ -1,9 +1,9 @@
 module SpectralKernels
 
   using LinearAlgebra, Printf # stdlibs
-  using FastGaussQuadrature, FINUFFT, StaticArrays, Vecchia, ForwardDiff, QuadGK # not stdlibs
+  using FastGaussQuadrature, FINUFFT, StaticArrays, Vecchia, ForwardDiff, QuadGK, FastHankelTransform # not stdlibs
   using FastChebInterp, TimerOutputs, MLStyle # not stdlibs
-  import SpecialFunctions: gamma, sinint, expint
+  import SpecialFunctions: gamma, sinint, expint, besselj0
 
   export AdaptiveKernelConfig, kernel_values
 
@@ -14,6 +14,6 @@ module SpectralKernels
   include("adaptive.jl")
   include("funcwrappers.jl")
   include("kernel.jl")
-  include("vecchia.jl")
+  # include("vecchia.jl")
 
 end 

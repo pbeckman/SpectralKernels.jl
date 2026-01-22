@@ -9,10 +9,8 @@ inplace_mul_tuple!(T, x) = map(t -> t .*= x, T)
 
 finufft1d3(w::Vector, s::Vector, x::Vector) = vec(nufft1d3(w, s, +1, 1e-15, 2pi*x))
 
-function print_panel_info(xs, true_is_converged, lowest_unconv_ix, 
-                          highest_unconv_ix, a, b)
-  @printf("\nintegrating panel w ∈ [%.2e, %.2e] (length %.2e) to resolve %i points x ∈ [%.2e, %.2e]\n", 
-          a, b, b-a, sum(!, true_is_converged), xs[lowest_unconv_ix], xs[highest_unconv_ix])
+function print_panel_info(xs, highest_unconv_ix, a, b)
+  @printf("\nintegrating panel w ∈ [%.2e, %.2e] (length %.2e) to resolve %i points x ≤ %.2e \n", a, b, b-a, highest_unconv_ix, xs[highest_unconv_ix])
   nothing
 end
 

@@ -1,7 +1,8 @@
 
 Base.@kwdef struct AdaptiveKernelConfig{S}
   sdf::S                        # spectral density function
-  p::Float64                    # origin power singularity |w|^p * sdf(w)
+  dim::Int64                    # dimension of isotropic sdf
+  alpha::Float64                # origin power singularity |w|^{-α} * sdf(w)
   tol::Float64                  # relative tolerance
   convergence_criteria::Symbol  # :tails, :panel, or :both (default)
   tail::Union{Float64, Nothing} # power law exponent for tail decay (optional)
@@ -17,7 +18,7 @@ Base.@kwdef struct AdaptiveKernelConfig{S}
 end
 
 function AdaptiveKernelConfig(sdf::S; 
-  tol::Float64=1e-10, convergence_criteria::Symbol=:both, p=0.0, tail=nothing, logw=false, 
+  dim=1, alpha=0.0, tol::Float64=1e-8, convergence_criteria::Symbol=:both, tail=nothing, logw=false, 
   quadspec::Tuple{Int64, Int64}=(2^12, 2^4)) where{S}
 
   if !(convergence_criteria in [:panel, :tails, :both]) 
@@ -29,86 +30,80 @@ function AdaptiveKernelConfig(sdf::S;
     quadspec = (2^12, 1)
   end
 
+  q = (dim == 1) ? 0 : 1
   m, k = quadspec                     
   legrule = QuadRule(m; case=:legendre)
-  jacrule = (p != 0.0) ? QuadRule(m; case=:jacobi, p=p) : legrule
+  jacrule = (q-alpha != 0.0) ? QuadRule(m; case=:jacobi, p=q-alpha) : legrule
   buffers = (
     Vector{Float64}(undef,  m*k), Vector{ComplexF64}(undef,  m*k), 
     Vector{Float64}(undef, 2m*k), Vector{ComplexF64}(undef, 2m*k)
     )
   AdaptiveKernelConfig{S}(
-    sdf, p, tol, convergence_criteria, tail, logw, 
+    sdf, dim, alpha, tol, convergence_criteria, tail, logw, 
     quadspec, legrule, jacrule, buffers, SplittingHeap())
 end
 
 quadsz(ac::AdaptiveKernelConfig) = prod(ac.quadspec)
 
 function kernel_values(config::AdaptiveKernelConfig{S}, 
-                       xs::Vector{Float64}; verbose=false, save_quad=false) where{S}
+                       xs::Vector{Float64}; verbose=false) where{S}
   issorted(xs) || throw(error("locations must be provided in sorted order."))
   # allocate some full-length buffers to re-use throughout the main loop:
-  (ks, errs) = (zeros(length(xs)) for _ in 1:2)
-  (true_is_converged, false_is_converged) = (fill(false, length(xs)) for _ in 1:2)
+  (ks, errs) = (zeros(Float64, length(xs)) for _ in 1:2)
+  highest_unconv_ix = length(xs)
 
   # initialize relavant constants and variables
   quadm     = quadsz(config)
   conv_crit = config.convergence_criteria
   (a, b) = (0.0, 0.0)
   (c, d) = (NaN, NaN)
+  # multiplicative constant m and exponent q so that m ∫ w^{q-α} f(w) ϕ(2πrw) dw
+  # gives the correct Fourier integral where ϕ is cos in 1D or J_0 in 2D
+  m, q = (config.dim == 1) ? (2, 0) : (2pi, 1)
 
   # compute K(0) using QuadGK
   @timeit TIMER "K(0)" begin
     L = 1.0
-    while L^config.p * abs(config.sdf(L)) > abs(config.sdf(0))/2
+    while L^(q-config.alpha) * abs(config.sdf(L)) > abs(config.sdf(0))/2
       L *= 2
     end
-    f(w) = (w*L)^config.p * (config.logw ? log(w*L) : 1) * config.sdf(w*L) * L
-    k0, k0_err = 2 .* quadgk(
+    f(w) = (w*L)^(q-config.alpha) * (config.logw ? log(w*L) : 1) * config.sdf(w*L) * L
+    k0, k0_err = m .* quadgk(
       w -> f(w), 0, Inf, 
       atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
       )
   end
   if iszero(xs[1])
     ks[1], errs[1] = (k0, k0_err)
-    true_is_converged[1]  = true
   end
 
   # main loop:
-  while !all(true_is_converged)
-    # update the "false_is_converged" indices:
-    broadcast!(!, false_is_converged, true_is_converged)
-    lowest_unconv_ix  = findfirst(false_is_converged)
-    highest_unconv_ix = findlast(false_is_converged)
-    # choose panel so that b-a is the distance in w-space for which 
-    # m points acheive the Nyquist sampling rate for exp(2πiwx) for all 
-    # unconverged x
+  while highest_unconv_ix > 0 && xs[highest_unconv_ix] > 0
+    # choose panel so that b-a is the distance in w-space for which m points
+    # acheive the Nyquist sampling rate for exp(2πiwx) for all unconverged x
     (a, b) = (b, b + quadm / (2*xs[highest_unconv_ix]))
     # print output about panel:
-    verbose && print_panel_info(xs, true_is_converged, lowest_unconv_ix, 
-                                highest_unconv_ix, a, b)
+    verbose && print_panel_info(xs, highest_unconv_ix, a, b)
     # add kernel values and quadrature errors from this panel to buffers
-    xs_unconv = xs[false_is_converged]
     @timeit TIMER "interval integral" begin
-      (panel_ks, panel_errs) = 2 .* fourier_integrate_interval(
+      (panel_ks, panel_errs) = fourier_integrate_interval(
         a, b, config,
-        xs_unconv, abs(k0), verbose, save_quad=save_quad
+        xs[1:highest_unconv_ix], abs(k0), verbose
         )
     end
     # add integral of new panel and panel quadrature error
-    @timeit TIMER "bitarray view operations" begin
-      @timeit TIMER "add panels to integral" begin
-        view(ks,   false_is_converged) .+= panel_ks
-        view(errs, false_is_converged) .+= panel_errs
-      end
+    @timeit TIMER "add panels to integral" begin
+      view(ks,   1:highest_unconv_ix) .+= panel_ks
+      view(errs, 1:highest_unconv_ix) .+= panel_errs
     end
     # estimate tail power law prefactor and decay rate
     @timeit TIMER "estimate tail decay" begin
       (c, d) = (conv_crit == :panel) ? (NaN, NaN) : estimate_tail_decay(config, a, b, d=config.tail)
     end
     if (isnan(c) || isnan(d)) && (conv_crit != :panel)
-      # if tail gives NaNs, it's probably because it decayed too fast,
-      # e.g. was exponential, for which truncation error is small, and we can
-      # rely on panel contribution to control error
+      # if tail gives NaNs, it's probably because it decayed too fast, e.g. was
+      # exponential, for which truncation error is small, and we can rely on
+      # panel contribution to control error
       verbose && @printf("\talgebraic tail estimate failed -- using convergence_criteria = :panel\n")
       conv_crit = :panel
     else
@@ -116,22 +111,23 @@ function kernel_values(config::AdaptiveKernelConfig{S},
         verbose && @printf("\talgebraic tail estimate S(w) ≈ %.2e * w^(%.2f)\n", c, d)
       end
     end
-    # check if any xs are still unconverged
-    @timeit TIMER "bitarray view operations" begin
-      @timeit TIMER "update converence bitarray" begin
-        for (j, ix) in enumerate(view(1:length(xs), false_is_converged))
-          trunc_err = truncation_error_estimate(
-            b, xs[ix], c, d
-            )
-          conv = check_convergence(
-            trunc_err, panel_ks[j], config.tol*abs(k0)/2, criteria=conv_crit
-            )
-          if conv
-            errs[ix] += 2*trunc_err
-            true_is_converged[ix] = true
-          end
+    # check convergence of xs in decreasing order
+    @timeit TIMER "check convergence" begin
+      conv = true
+      ix   = highest_unconv_ix
+      while conv && ix > 0
+        trunc_err = (conv_crit == :panel) ? 0 : truncation_error_estimate(
+          b, xs[ix], c, d, config.dim
+          )
+        conv = check_convergence(
+          trunc_err, panel_ks[ix], config.tol*abs(k0)/2, criteria=conv_crit
+          )
+        if conv
+          errs[ix] += 2*trunc_err
+          ix -= 1
         end
       end
+      highest_unconv_ix = ix
     end
   end
   return (ks, errs)
@@ -147,17 +143,19 @@ function estimate_tail_decay(config, a, b; d=nothing)
     tmp = log.(abs.(config.sdf.(ws)))
     logc, d = [ones(nf) log.(ws)] \ tmp
   end
-  d += config.p
+  d += -config.alpha
   # compute the least squares estimate for c
-  c = sum(ws.^(d + config.p) .* abs.(config.sdf.(ws))) / sum(ws.^(2d))
+  c = sum(ws.^(d - config.alpha) .* abs.(config.sdf.(ws))) / sum(ws.^(2d))
   (c, d)
 end
 
-function truncation_error_estimate(b, x, c, d)
-    # compute analytic truncation error of power law Fourier integral 
-    # from b to Inf with multiplicative constant c and power law exponent d
-    # return -c*b^(d+1) * real(expint(-d, 2pi*im*b*x))
-    return min(-c/(d+1)*b^(d+1), c*b^d/(2pi*x))
+function truncation_error_estimate(b, x, c, d, dim)
+    # compute analytic truncation error of power law Fourier integral from b to
+    # Inf with multiplicative constant c and power law exponent d
+    return min(
+      -c/(d+dim)*b^(d+dim), 
+      c*b^(d+(dim-1)/2) / (2pi*x^((dim+1)/2))
+      )
 end
 
 function check_convergence(trunc_err, panel_k, tol; criteria=:both)

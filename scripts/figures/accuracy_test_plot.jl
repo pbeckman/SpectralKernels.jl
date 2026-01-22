@@ -2,7 +2,7 @@ using SpectralKernels, ForwardDiff, BenchmarkTools, Printf, Plots, Plots.Measure
 
 include("../../../SpectralKernels.jl/scripts/matern_pair.jl")
 
-p = -0.1
+alpha = 0.1
 parms_init = (0.5, 0.51)
 parms = (inv(matern_cov(0, (1.0, parms_init...))), parms_init...)
 
@@ -40,10 +40,10 @@ iter = zip(
         w -> matern_sdf(w, parms), 
         nusdf, 
         psdf],
-    [0, p, p, p],
+    [0, alpha, alpha, alpha],
     [false, false, false, true]
 )
-for (j, (title, K, S, p, logw)) in enumerate(iter)
+for (j, (title, K, S, alpha, logw)) in enumerate(iter)
     @printf("Making plot %i\n", j)
     M_kernel = [K(abs(p1 - p2)) for p1 in pts, p2 in pts]
     for (i, tol) in enumerate(tols)
@@ -53,7 +53,7 @@ for (j, (title, K, S, p, logw)) in enumerate(iter)
             S,
             tol=tol, 
             quadspec=quadspec, 
-            p=p,
+            alpha=alpha,
             logw=logw
         )
 

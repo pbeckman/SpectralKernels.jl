@@ -1,14 +1,14 @@
 
 using BesselK, HypergeometricFunctions
 
-# Matern covariance with parameters p evaluated at distance t
-function matern_cov(t, p)
-  (phi, alpha, v) = p  
-  constant  = sqrt(pi)*phi
-  constant /= (2^(v-1))*BesselK._gamma(v+1/2)*alpha^(2*v)
-  arg = alpha*abs(2pi*t) # notice the 2pi change here
-  iszero(arg) && return constant*BesselK.adbesselkxv(v, 0)
-  constant*BesselK.adbesselk(v, arg)*(arg^v)
+# Isotropic Matern covariance with parameters p evaluated at distance t
+function matern_cov(t, p; d=1)
+  (phi, alpha, v) = p
+    constant  = pi^(d/2)*phi
+    constant /= (2^(v-1))*BesselK._gamma(v+d/2)*alpha^(2*v)
+    arg = alpha*2pi*abs(t)
+    iszero(arg) && return constant*BesselK.adbesselkxv(v, 0)
+    constant*BesselK.adbesselk(v, arg)*(arg^v)
 end
 
 # Matern spectral density
