@@ -1,7 +1,7 @@
 
-Base.@kwdef struct AdaptiveKernelConfig
+struct AdaptiveKernelConfig
   dim::Int64                    # dimension of isotropic sdf
-  alpha::Float64                # origin power singularity |w|^{-α} * sdf(w)
+  alpha::Float64                # singularity
   tol::Float64                  # relative tolerance
   convergence_criteria::Symbol  # :tails, :panel, or :both (default)
   tail::Union{Float64, Nothing} # power law exponent for tail decay (optional)
@@ -16,14 +16,9 @@ Base.@kwdef struct AdaptiveKernelConfig
   splittingheap::SplittingHeap  # heap of subintervals to be integrated
 end
 
-struct Integrand{S,dS}
-  f::S
-  df::dS
-end
-
-function AdaptiveKernelConfig(sdf::S; 
-  dim=1, alpha=0.0, tol::Float64=1e-8, convergence_criteria::Symbol=:both, tail=nothing, logw=false, 
-  quadspec::Tuple{Int64, Int64}=(2^12, 2^4)) where{S}
+function AdaptiveKernelConfig(; dim=1, alpha=0.0, tol::Float64=1e-8,
+                              convergence_criteria::Symbol=:both, tail=nothing, logw=false,
+                              quadspec::Tuple{Int64, Int64}=(2^12, 2^4))
 
   if !(convergence_criteria in [:panel, :tails, :both]) 
     error("Argument convergence_criteria must be one of :panel, :tails, :both.")
@@ -45,6 +40,41 @@ function AdaptiveKernelConfig(sdf::S;
   AdaptiveKernelConfig(
     dim, alpha, tol, convergence_criteria, tail, logw, 
     quadspec, legrule, jacrule, buffers, SplittingHeap())
+end
+
+# Question: maybe this should encode the dimension?
+struct Integrand{S,dS}
+  f::S
+  df::dS
+  p::Float64 # power for |ω|ᵖ multiplier
+  logw::Bool # indicator for whether to multiply with log |ω|
+  c::Float64 # multiplier 
+end
+
+function Integrand(f, df=nothing; p=0.0, logw=false, c=1.0)
+  Integrand(f, df, p, logw, c)
+end
+
+function (ig::Integrand{S,dS})(r::Float64) where{S,dS}
+  fr = ig.c*ig.f(r)
+  iszero(ig.p) || (fr *= abs(r)^ig.p)
+  ig.logw && (fr *= log(abs(r)))
+  fr
+end
+
+function compute_k0(integrand, q, alpha, m, tol)
+  fun = integrand.f
+  L = 1.0
+  while L^(q-alpha) * abs(fun(L)) > abs(fun(0))/2
+    L *= 2
+  end
+  # TODO (cg 2026/01/23 14:02): I added the method integrand(w) that should
+  # ideally replace this. But the dimension isn't encoded in the type.
+  f(w) = (w*L)^(q-alpha) * (integrand.logw ? log(w*L) : 1) * fun(w*L) * L
+  m .* quadgk(
+    w -> f(w), 0, Inf, 
+    atol=0.0, rtol=min(1e-8, 1e-2*tol)
+  )
 end
 
 quadsz(ac::AdaptiveKernelConfig) = prod(ac.quadspec)
@@ -71,15 +101,7 @@ function kernel_values(integrand::Integrand{S,dS},
 
   # compute K(0) using QuadGK
   @timeit TIMER "K(0)" begin
-    L = 1.0
-    while L^(q-config.alpha) * abs(fun(L)) > abs(fun(0))/2
-      L *= 2
-    end
-    f(w) = (w*L)^(q-config.alpha) * (config.logw ? log(w*L) : 1) * fun(w*L) * L
-    k0, k0_err = m .* quadgk(
-      w -> f(w), 0, Inf, 
-      atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
-      )
+    (k0, k0_err) = compute_k0(integrand, q, config.alpha, m, config.tol)
   end
   if iszero(xs[1])
     ks[1], errs[1] = (k0, k0_err)
@@ -95,7 +117,7 @@ function kernel_values(integrand::Integrand{S,dS},
     # add kernel values and quadrature errors from this panel to buffers
     @timeit TIMER "interval integral" begin
       (panel_ks, panel_errs) = fourier_integrate_interval(
-        a, b, config,
+        a, b, integrand, config,
         xs[1:highest_unconv_ix], abs(k0), verbose
         )
     end
@@ -106,7 +128,7 @@ function kernel_values(integrand::Integrand{S,dS},
     end
     # estimate tail power law prefactor and decay rate
     @timeit TIMER "estimate tail decay" begin
-      (c, d) = (conv_crit == :panel) ? (NaN, NaN) : estimate_tail_decay(integrand, a, b, d=config.tail)
+      (c, d) = (conv_crit == :panel) ? (NaN, NaN) : estimate_tail_decay(integrand, config.alpha, a, b, d=config.tail)
     end
     if (isnan(c) || isnan(d)) && (conv_crit != :panel)
       # if tail gives NaNs, it's probably because it decayed too fast, e.g. was
@@ -141,7 +163,7 @@ function kernel_values(integrand::Integrand{S,dS},
   return (ks, errs)
 end
 
-function estimate_tail_decay(integrand::Integrand, a, b; d=nothing)
+function estimate_tail_decay(integrand::Integrand, alpha, a, b; d=nothing)
   # get the integrand and its derivative:
   (fun, dfun) = (integrand.f, integrand.df)
   # number of points to fit on panel
@@ -153,9 +175,9 @@ function estimate_tail_decay(integrand::Integrand, a, b; d=nothing)
     tmp = @. log(abs(fun(ws)))
     logc, d = [ones(nf) log.(ws)] \ tmp
   end
-  d += -config.alpha
+  d += -alpha
   # compute the least squares estimate for c
-  c = sum(ws.^(d - config.alpha) .* abs.(fun.(ws))) / sum(ws.^(2d))
+  c = sum(ws.^(d - alpha) .* abs.(fun.(ws))) / sum(ws.^(2d))
   (c, d)
 end
 
@@ -171,3 +193,4 @@ end
 function check_convergence(trunc_err, panel_k, tol; criteria=:both)
   (criteria == :panel || trunc_err < tol) && (criteria == :tails || abs(panel_k) < tol)
 end
+

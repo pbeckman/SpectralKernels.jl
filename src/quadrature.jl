@@ -95,7 +95,7 @@ function updatequadbufs!(buffers, legrule::QuadRule, jacrule::QuadRule, f::F, a,
 end
 
 function fourier_integrate_panel(buffers, legrule::QuadRule, jacrule::QuadRule, f, a, b, xs; p=0, dim=1)
-  @show p
+  #@show p
   check_subdivide_failure(a, b, xs)
   @timeit TIMER "update quadrature buffers" begin
     (no1, buf1, no2, buf2) = updatequadbufs!(
@@ -188,7 +188,7 @@ function fourier_integrate_interval(a, b, integrand, config, xs, k0, verbose)
         I1 = (I0 .- real(I1a) .+ 2pi*xs .* imag.(I1b)) / (-config.alpha+1)
         I2 = (I0 .- real(I2a) .+ 2pi*xs .* imag.(I2b)) / (-config.alpha+1)
       else
-        @show q, config.alpha, "Jacobi"
+        #@show q, config.alpha, "Jacobi"
         @timeit TIMER "panel integral" begin
           (I1, I2) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
@@ -198,7 +198,7 @@ function fourier_integrate_interval(a, b, integrand, config, xs, k0, verbose)
         end
       end
     else
-      @show q, config.alpha, "Legendre"
+      #@show q, config.alpha, "Legendre"
       @timeit TIMER "panel integral" begin
         (I1, I2) = fourier_integrate_panel(
           config.buffers, config.legrule, config.jacrule,
