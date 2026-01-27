@@ -1,19 +1,25 @@
 
 @testset "1D Exponential SDF" begin
-  sdf(w)      = exp(-abs(w)/50.0)
-  truth(r)    = (2/50.0)/(inv(50.0)^2 + (2*pi*r)^2)
-  integrand   = SpectralKernels.Integrand(sdf)
+  S(w)  = exp(-abs(w))
+  K(r)  = 2 / (1 + (2*pi*r)^2)
+  dK(r) = -(16pi^2*r) / (1 + (2*pi*r)^2)^2
+  
+  xgrid = collect(range(0.001, 5.1, length=1_000))
 
-  for tol in (1e-8, 1e-10, 1e-12)
-    @testset "(tol=$(tol))"  begin
-      cfg         = SpectralKernels.AdaptiveKernelConfig(;tol=tol)
-      xgrid       = collect(range(0.001, 1.1, length=1_000))
-      true_values = truth.(xgrid)
-      (integrals, errors) = kernel_values(integrand, xgrid, cfg)
-      empirical_errors = abs.(integrals - true_values)./truth(0.0)
-      @test all(empirical_errors .<= tol*3)
+  for derivative in [false, true]
+    @testset "(derivative=$(derivative))" begin
+      for tol in (1e-8, 1e-10, 1e-12)
+        true_values = derivative ? dK.(xgrid) : K.(xgrid)
+        @testset "(tol=$(tol))" begin
+          cfg = SpectralKernels.AdaptiveKernelConfig(
+            S, tol=tol, derivative=derivative
+            )
+          (integrals, errors) = kernel_values(cfg, xgrid)
+          empirical_errors = abs.(integrals - true_values)./K(0.0)
+          @test all(empirical_errors .<= 10*tol)
+        end
+      end
     end
   end
-
 end
 

@@ -1,23 +1,29 @@
 
-struct AdaptiveKernelConfig
+struct AdaptiveKernelConfig{S,dS}
+  f::S                          # spectral density function
+  df::dS                        # derivative of spectral density function
   dim::Int64                    # dimension of isotropic sdf
-  alpha::Float64                # singularity
+  c::Float64                    # multiplicative constant
+  alpha::Float64                # singularity |ω|⁻ᵃ
+  p::Float64                    # |ω|ᵖ multiplier in integrand including α
+  logw::Bool                    # whether to include log|w| singularity
+  derivative::Bool              # whether to compute K'(r)
   tol::Float64                  # relative tolerance
   convergence_criteria::Symbol  # :tails, :panel, or :both (default)
   tail::Union{Float64, Nothing} # power law exponent for tail decay (optional)
-  logw::Bool                    # whether to include log(w) singularity
   quadspec::Tuple{Int64, Int64} # (m, k): k many m-node panels per NUFFT
   legrule::QuadRule             # Legendre quadrature rule
   jacrule::QuadRule             # Jacobi quadrature rule
   buffers::Tuple{               # m- and 2m-node locations and integrands
     Vector{Float64}, Vector{ComplexF64},
-    Vector{Float64}, Vector{ComplexF64} 
-    } 
+    Vector{Float64}, Vector{ComplexF64}
+    }
   splittingheap::SplittingHeap  # heap of subintervals to be integrated
 end
 
-function AdaptiveKernelConfig(; dim=1, alpha=0.0, tol::Float64=1e-8,
-                              convergence_criteria::Symbol=:both, tail=nothing, logw=false,
+function AdaptiveKernelConfig(f; df=nothing, dim=1, alpha=0.0, 
+                              tol::Float64=1e-8, derivative=false, logw=false,
+                              convergence_criteria::Symbol=:both, tail=nothing, 
                               quadspec::Tuple{Int64, Int64}=(2^12, 2^4))
 
   if !(convergence_criteria in [:panel, :tails, :both]) 
@@ -29,79 +35,55 @@ function AdaptiveKernelConfig(; dim=1, alpha=0.0, tol::Float64=1e-8,
     quadspec = (2^12, 1)
   end
 
-  q = (dim == 1) ? 0 : 1
+  p = alpha + (dim == 2) + derivative
+  c = (dim == 1) ? 2.0 : 2pi
+  if derivative; c *= -2pi; end
+
   m, k = quadspec                     
   legrule = QuadRule(m; case=:legendre)
-  jacrule = (q-alpha != 0.0) ? QuadRule(m; case=:jacobi, p=q-alpha) : legrule
+  jacrule = (p != 0.0) ? QuadRule(m; case=:jacobi, p=p) : legrule
   buffers = (
     Vector{Float64}(undef,  m*k), Vector{ComplexF64}(undef,  m*k), 
     Vector{Float64}(undef, 2m*k), Vector{ComplexF64}(undef, 2m*k)
     )
+
   AdaptiveKernelConfig(
-    dim, alpha, tol, convergence_criteria, tail, logw, 
+    f, df, dim, c, alpha, p, logw, derivative, tol, convergence_criteria, tail, 
     quadspec, legrule, jacrule, buffers, SplittingHeap())
 end
 
-# Question: maybe this should encode the dimension?
-struct Integrand{S,dS}
-  f::S
-  df::dS
-  p::Float64 # power for |ω|ᵖ multiplier
-  logw::Bool # indicator for whether to multiply with log |ω|
-  c::Float64 # multiplier 
-end
-
-function Integrand(f, df=nothing; p=0.0, logw=false, c=1.0)
-  Integrand(f, df, p, logw, c)
-end
-
-function (ig::Integrand{S,dS})(r::Float64) where{S,dS}
-  fr = ig.c*ig.f(r)
-  iszero(ig.p) || (fr *= abs(r)^ig.p)
-  ig.logw && (fr *= log(abs(r)))
-  fr
-end
-
-function compute_k0(integrand, q, alpha, m, tol)
-  fun = integrand.f
-  L = 1.0
-  while L^(q-alpha) * abs(fun(L)) > abs(fun(0))/2
+function compute_k0(config)
+  fun = config.f
+  p   = config.p
+  L   = 1.0
+  while L^p * abs(fun(L)) > abs(fun(0))/2
     L *= 2
   end
-  # TODO (cg 2026/01/23 14:02): I added the method integrand(w) that should
-  # ideally replace this. But the dimension isn't encoded in the type.
-  f(w) = (w*L)^(q-alpha) * (integrand.logw ? log(w*L) : 1) * fun(w*L) * L
-  m .* quadgk(
-    w -> f(w), 0, Inf, 
-    atol=0.0, rtol=min(1e-8, 1e-2*tol)
+  config.c .* quadgk(
+    w -> (w*L)^p * (config.logw ? log(w*L) : 1) * fun(w*L) * L, 
+    0, Inf, 
+    atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
   )
 end
 
 quadsz(ac::AdaptiveKernelConfig) = prod(ac.quadspec)
 
-function kernel_values(integrand::Integrand{S,dS},
-                       xs::AbstractVector{Float64},
-                       config::AdaptiveKernelConfig; verbose=false) where{S,dS}
+function kernel_values(config::AdaptiveKernelConfig{S,dS},
+                       xs::AbstractVector{Float64}; verbose=false) where{S,dS}
   issorted(xs) || throw(error("locations must be provided in sorted order."))
   # allocate some full-length buffers to re-use throughout the main loop:
   (ks, errs) = (zeros(Float64, length(xs)) for _ in 1:2)
   highest_unconv_ix = length(xs)
-
-  # get the integrand and its derivative:
-  (fun, dfun) = (integrand.f, integrand.df)
 
   # initialize relavant constants and variables
   quadm     = quadsz(config)
   conv_crit = config.convergence_criteria
   (a, b) = (0.0, 0.0)
   (c, d) = (NaN, NaN)
-  # multiplicative constant m and exponent q so that m ∫ w^{q-α} f(w) ϕ(2πrw) dw
-  # gives the correct Fourier integral where ϕ is cos in 1D or J_0 in 2D
-  m, q = (config.dim == 1) ? (2, 0) : (2pi, 1)
 
   # compute K(0) using QuadGK
   @timeit TIMER "K(0)" begin
-    (k0, k0_err) = compute_k0(integrand, q, config.alpha, m, config.tol)
+    (k0, k0_err) = compute_k0(config)
   end
   if iszero(xs[1])
     ks[1], errs[1] = (k0, k0_err)
@@ -117,8 +99,7 @@ function kernel_values(integrand::Integrand{S,dS},
     # add kernel values and quadrature errors from this panel to buffers
     @timeit TIMER "interval integral" begin
       (panel_ks, panel_errs) = fourier_integrate_interval(
-        a, b, integrand, config,
-        xs[1:highest_unconv_ix], abs(k0), verbose
+        a, b, config, xs[1:highest_unconv_ix], abs(k0), verbose
         )
     end
     # add integral of new panel and panel quadrature error
@@ -128,7 +109,7 @@ function kernel_values(integrand::Integrand{S,dS},
     end
     # estimate tail power law prefactor and decay rate
     @timeit TIMER "estimate tail decay" begin
-      (c, d) = (conv_crit == :panel) ? (NaN, NaN) : estimate_tail_decay(integrand, config.alpha, a, b, d=config.tail)
+      (c, d) = (conv_crit == :panel) ? (NaN, NaN) : estimate_tail_decay(config, a, b, d=config.tail)
     end
     if (isnan(c) || isnan(d)) && (conv_crit != :panel)
       # if tail gives NaNs, it's probably because it decayed too fast, e.g. was
@@ -163,9 +144,9 @@ function kernel_values(integrand::Integrand{S,dS},
   return (ks, errs)
 end
 
-function estimate_tail_decay(integrand::Integrand, alpha, a, b; d=nothing)
-  # get the integrand and its derivative:
-  (fun, dfun) = (integrand.f, integrand.df)
+function estimate_tail_decay(config, a, b; d=nothing)
+  # get the spectral density
+  fun = config.f
   # number of points to fit on panel
   nf = 1000
   # choose some frequency points on the last panel to extrapolate from
@@ -175,9 +156,9 @@ function estimate_tail_decay(integrand::Integrand, alpha, a, b; d=nothing)
     tmp = @. log(abs(fun(ws)))
     logc, d = [ones(nf) log.(ws)] \ tmp
   end
-  d += -alpha
+  d -= config.alpha
   # compute the least squares estimate for c
-  c = sum(ws.^(d - alpha) .* abs.(fun.(ws))) / sum(ws.^(2d))
+  c = sum(ws.^d .* abs.(fun.(ws))) / sum(ws.^(2d))
   (c, d)
 end
 
