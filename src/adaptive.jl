@@ -1,25 +1,30 @@
 
-Base.@kwdef struct AdaptiveKernelConfig{S}
-  sdf::S                        # spectral density function
+struct AdaptiveKernelConfig{S,dS}
+  f::S                          # spectral density function
+  df::dS                        # derivative of spectral density function
   dim::Int64                    # dimension of isotropic sdf
-  alpha::Float64                # origin power singularity |w|^{-α} * sdf(w)
+  c::Float64                    # multiplicative constant
+  alpha::Float64                # singularity |ω|⁻ᵃ
+  p::Float64                    # |ω|ᵖ multiplier in integrand including α
+  logw::Bool                    # whether to include log|w| singularity
+  derivative::Bool              # whether to compute K'(r)
   tol::Float64                  # relative tolerance
   convergence_criteria::Symbol  # :tails, :panel, or :both (default)
   tail::Union{Float64, Nothing} # power law exponent for tail decay (optional)
-  logw::Bool                    # whether to include log(w) singularity
   quadspec::Tuple{Int64, Int64} # (m, k): k many m-node panels per NUFFT
   legrule::QuadRule             # Legendre quadrature rule
   jacrule::QuadRule             # Jacobi quadrature rule
   buffers::Tuple{               # m- and 2m-node locations and integrands
     Vector{Float64}, Vector{ComplexF64},
-    Vector{Float64}, Vector{ComplexF64} 
-    } 
+    Vector{Float64}, Vector{ComplexF64}
+    }
   splittingheap::SplittingHeap  # heap of subintervals to be integrated
 end
 
-function AdaptiveKernelConfig(sdf::S; 
-  dim=1, alpha=0.0, tol::Float64=1e-8, convergence_criteria::Symbol=:both, tail=nothing, logw=false, 
-  quadspec::Tuple{Int64, Int64}=(2^12, 2^4)) where{S}
+function AdaptiveKernelConfig(f; df=nothing, dim=1, alpha=0.0, 
+                              tol::Float64=1e-8, derivative=false, logw=false,
+                              convergence_criteria::Symbol=:both, tail=nothing, 
+                              quadspec::Tuple{Int64, Int64}=(2^12, 2^4))
 
   if !(convergence_criteria in [:panel, :tails, :both]) 
     error("Argument convergence_criteria must be one of :panel, :tails, :both.")
@@ -30,23 +35,41 @@ function AdaptiveKernelConfig(sdf::S;
     quadspec = (2^12, 1)
   end
 
-  q = (dim == 1) ? 0 : 1
+  p = alpha + (dim == 2) + derivative
+  c = (dim == 1) ? 2.0 : 2pi
+  if derivative; c *= -2pi; end
+
   m, k = quadspec                     
   legrule = QuadRule(m; case=:legendre)
-  jacrule = (q-alpha != 0.0) ? QuadRule(m; case=:jacobi, p=q-alpha) : legrule
+  jacrule = (p != 0.0) ? QuadRule(m; case=:jacobi, p=p) : legrule
   buffers = (
     Vector{Float64}(undef,  m*k), Vector{ComplexF64}(undef,  m*k), 
     Vector{Float64}(undef, 2m*k), Vector{ComplexF64}(undef, 2m*k)
     )
-  AdaptiveKernelConfig{S}(
-    sdf, dim, alpha, tol, convergence_criteria, tail, logw, 
+
+  AdaptiveKernelConfig(
+    f, df, dim, c, alpha, p, logw, derivative, tol, convergence_criteria, tail, 
     quadspec, legrule, jacrule, buffers, SplittingHeap())
+end
+
+function compute_k0(config)
+  fun = config.f
+  p   = config.p
+  L   = 1.0
+  while L^p * abs(fun(L)) > abs(fun(0))/2
+    L *= 2
+  end
+  config.c .* quadgk(
+    w -> (w*L)^p * (config.logw ? log(w*L) : 1) * fun(w*L) * L, 
+    0, Inf, 
+    atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
+  )
 end
 
 quadsz(ac::AdaptiveKernelConfig) = prod(ac.quadspec)
 
-function kernel_values(config::AdaptiveKernelConfig{S}, 
-                       xs::Vector{Float64}; verbose=false) where{S}
+function kernel_values(config::AdaptiveKernelConfig{S,dS},
+                       xs::AbstractVector{Float64}; verbose=false) where{S,dS}
   issorted(xs) || throw(error("locations must be provided in sorted order."))
   # allocate some full-length buffers to re-use throughout the main loop:
   (ks, errs) = (zeros(Float64, length(xs)) for _ in 1:2)
@@ -57,21 +80,10 @@ function kernel_values(config::AdaptiveKernelConfig{S},
   conv_crit = config.convergence_criteria
   (a, b) = (0.0, 0.0)
   (c, d) = (NaN, NaN)
-  # multiplicative constant m and exponent q so that m ∫ w^{q-α} f(w) ϕ(2πrw) dw
-  # gives the correct Fourier integral where ϕ is cos in 1D or J_0 in 2D
-  m, q = (config.dim == 1) ? (2, 0) : (2pi, 1)
 
   # compute K(0) using QuadGK
   @timeit TIMER "K(0)" begin
-    L = 1.0
-    while L^(q-config.alpha) * abs(config.sdf(L)) > abs(config.sdf(0))/2
-      L *= 2
-    end
-    k0, k0_err = m .* quadgk(
-      w -> (w*L)^(q-config.alpha) * (config.logw ? log(w*L) : 1) * config.sdf(w*L) * L, 
-      0, Inf, 
-      atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
-      )
+    (k0, k0_err) = compute_k0(config)
   end
   if iszero(xs[1])
     ks[1], errs[1] = (k0, k0_err)
@@ -87,8 +99,7 @@ function kernel_values(config::AdaptiveKernelConfig{S},
     # add kernel values and quadrature errors from this panel to buffers
     @timeit TIMER "interval integral" begin
       (panel_ks, panel_errs) = fourier_integrate_interval(
-        a, b, config,
-        xs[1:highest_unconv_ix], abs(k0), verbose
+        a, b, config, xs[1:highest_unconv_ix], abs(k0), verbose
         )
     end
     # add integral of new panel and panel quadrature error
@@ -134,18 +145,20 @@ function kernel_values(config::AdaptiveKernelConfig{S},
 end
 
 function estimate_tail_decay(config, a, b; d=nothing)
+  # get the spectral density
+  fun = config.f
   # number of points to fit on panel
   nf = 1000
   # choose some frequency points on the last panel to extrapolate from
   ws = range(a + (b-a), stop=b, length=nf)
   if isnothing(d)
     # linear least squares in log space to estimate d
-    tmp = log.(abs.(config.sdf.(ws)))
+    tmp = @. log(abs(fun(ws)))
     logc, d = [ones(nf) log.(ws)] \ tmp
   end
-  d += -config.alpha
+  d -= config.alpha
   # compute the least squares estimate for c
-  c = sum(ws.^(d - config.alpha) .* abs.(config.sdf.(ws))) / sum(ws.^(2d))
+  c = sum(ws.^d .* abs.(fun.(ws))) / sum(ws.^(2d))
   (c, d)
 end
 
@@ -161,3 +174,4 @@ end
 function check_convergence(trunc_err, panel_k, tol; criteria=:both)
   (criteria == :panel || trunc_err < tol) && (criteria == :tails || abs(panel_k) < tol)
 end
+
