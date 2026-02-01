@@ -1,5 +1,5 @@
 
-using BesselK, HypergeometricFunctions
+using BesselK, HypergeometricFunctions, Printf
 
 # Isotropic Matern covariance with parameters p evaluated at distance t
 function matern_cov(t, p; d=1)

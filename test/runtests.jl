@@ -1,5 +1,8 @@
 
 using Test, SpectralKernels
 
-include("exponential_sdf_1d.jl")
+@testset "All tests" begin
+    include("exponential_sdf_1d.jl")
+    include("matern_sdf.jl")
+end
 

@@ -4,7 +4,7 @@ module SpectralKernels
   using LinearAlgebra, Printf # stdlibs
   using FastGaussQuadrature, FINUFFT, StaticArrays, QuadGK, FastHankelTransform # not stdlibs
   using TimerOutputs # not stdlibs
-  import SpecialFunctions: gamma, sinint, expint, besselj0
+  import SpecialFunctions: gamma, sinint, expint, besselj
 
   export AdaptiveKernelConfig, kernel_values
 
