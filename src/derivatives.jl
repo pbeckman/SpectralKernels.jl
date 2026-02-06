@@ -34,6 +34,8 @@ function warping_gradients(warping_norm::W, xs, warping_params; backend,
   grads
 end
 
+# TODO (cg 2026/02/06 15:11): should this just take warped_xs? I think no, but
+# something to think about.
 function kernel_warping_gradients(cfg::AdaptiveKernelConfig{S,dS},
                                   warping_norm::W, xs, 
                                   warping_params; backend) where{S,dS,W}
