@@ -45,3 +45,19 @@ function kernel_warping_gradients(cfg::AdaptiveKernelConfig{S,dS},
                     multipliers = dvalues)
 end
 
+# TODO (cg 2026/02/06 17:25): this does _not_ work for the singularity
+# parameter, which needs to be handled separately.
+function kernel_sdf_derivatives(cfg::AdaptiveKernelConfig{ParametricFunction{S,P},dS},
+                                xs; backend) where{S,P,dS}
+  # get the derivatives of the parametric sdf.
+  psdf   = cfg.f
+  dsdfs  = derivatives(psdf, backend)
+  fnames = fieldnames(AdaptiveKernelConfig)
+  repeated_fields = getfield.(Ref(cfg), fnames[3:end])
+  # now for each one, make a new configuration and do the integration.
+  derivs = map(dsdfs) do dsdf_dj
+    cfgj = AdaptiveKernelConfig(dsdf_dj, nothing, repeated_fields...)
+    kernel_values(cfgj, xs; verbose=false)[1]
+  end
+end
+

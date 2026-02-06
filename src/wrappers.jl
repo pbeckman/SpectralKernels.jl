@@ -15,7 +15,6 @@ function (as::ArgSwap{F,P,J})(args...) where{F,P,J}
   as.fn.fn(swapped_args...)
 end
 
-# Unlike ParametricFunction, this is an internal object.
 struct ParametricDerivative{F,P,J,A,B}
   swap_sdf::ArgSwap{F,P,J}
   prep::A
@@ -29,10 +28,6 @@ function ParametricDerivative(psdf::ParametricFunction{F,P}, ::Val{J},
   ParametricDerivative(swap, prep, backend)
 end
 
-# So here is the annoying thing: you can only differentiate with respect to the
-# first arg in DifferentiationInterface.jl, so it falls on us to write an
-# annoying wrapper to secretly permute the args.
-#
 # What I _want_ is to say
 #
 # prep = prepare_derivative(sdf::ParametricFunction, backend, Constant(w),
@@ -51,5 +46,9 @@ function (pd::ParametricDerivative{F,P,J,A,B})(w) where{F,P,J,A,B}
   args          = (w, pd.swap_sdf.fn.params...)
   permuted_args = ntuple(j->(j==1 ? args[J] : Constant((j==J ? w : args[j]))), P+1)
   derivative(pd.swap_sdf, pd.prep, pd.backend, permuted_args...)
+end
+
+function derivatives(psdf::ParametricFunction{F,P}, backend::B) where{F,P,B}
+  ntuple(j->ParametricDerivative(psdf, Val(j), backend), P)
 end
 

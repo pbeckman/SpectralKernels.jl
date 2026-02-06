@@ -64,12 +64,12 @@ function compute_k0(config)
   fun = config.f
   p   = config.p
   L   = 1.0
-  while L^p * abs(fun(L)) > abs(fun(0))/2
+  while L^p * abs(fun(L)) > abs(fun(0.0))/2
     L *= 2
   end
   config.c .* quadgk(
     w -> (w*L)^p * (config.logw ? log(w*L) : 1) * fun(w*L) * L, 
-    0, Inf, 
+    0.0, Inf, 
     atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
   )
 end
