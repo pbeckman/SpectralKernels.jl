@@ -52,6 +52,14 @@ function AdaptiveKernelConfig(f; df=nothing, dim=1, alpha=0.0,
     quadspec, legrule, jacrule, buffers, SplittingHeap())
 end
 
+function gen_derivative_config(cfg::AdaptiveKernelConfig{S,dS}) where{S,dS}
+  cfg.derivative && return cfg
+  AdaptiveKernelConfig(cfg.f; df=cfg.df, derivative=true, dim=cfg.dim,
+                       tol=cfg.tol, logw=cfg.logw, tail=cfg.tail,
+                       convergence_criteria=cfg.convergence_criteria,
+                       quadspec=cfg.quadspec)
+end
+
 function compute_k0(config)
   fun = config.f
   p   = config.p

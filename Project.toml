@@ -5,6 +5,7 @@ authors = ["Chris Geoga <geoga@wisc.edu>", "Paul Beckman <paul.beckman@cims.nyu.
 
 [deps]
 Bessels = "0e736298-9ec6-45e8-9647-e4fc86a2fe38"
+DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
 FINUFFT = "d8beea63-0952-562e-9c6a-8e8ef7364055"
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 FastHankelTransform = "3a9aa71a-4826-43c7-bf6d-7fc63822c18e"
@@ -19,4 +20,5 @@ TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
+DifferentiationInterface = "0.7.16"
 FastHankelTransform = "0.1.1"
