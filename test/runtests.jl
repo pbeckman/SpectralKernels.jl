@@ -13,5 +13,6 @@ using ForwardDiff
 
 @testset "Derivatives" begin
   include("derivatives/warping.jl")
+  include("derivatives/argswap.jl")
 end
 

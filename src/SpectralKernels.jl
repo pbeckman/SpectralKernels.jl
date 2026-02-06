@@ -13,6 +13,7 @@ module SpectralKernels
 
   const TIMER = TimerOutput()
 
+  include("wrappers.jl")
   include("utils.jl")
   include("quadrature.jl")
   include("adaptive.jl")
