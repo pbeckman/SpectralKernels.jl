@@ -1,5 +1,7 @@
 
-using SpectralKernels, Printf, LinearAlgebra, Plots, LaTeXStrings
+# TODO (cg 2026/02/06 13:33): this fails with a QuadGK error right now.
+
+using SpectralKernels, Printf, LinearAlgebra#, Plots, LaTeXStrings
 include("matern_pair.jl")
 
 # singularity parameter (set to 0 for standard Matern)
@@ -51,6 +53,7 @@ err_true = K_true - K_fourier
 @printf("\naverage absolute error: %.2e\n", sum(abs.(err_true)) / n)
 @printf("max absolute error:     %.2e\n\n", maximum(abs.(err_true)))
 
+#=
 # skip points when plotting many points to avoid slowness
 sk = ceil(Int64, n/200)
 gr(size=(600,600))
@@ -96,3 +99,4 @@ plot!(pl,
     label="tolerance", linestyle=:dash, linewidth=2, c=:blue
     )
 display(pl)
+=#
