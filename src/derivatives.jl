@@ -50,13 +50,10 @@ end
 function kernel_sdf_derivatives(cfg::AdaptiveKernelConfig{ParametricFunction{S,P},dS},
                                 xs; backend) where{S,P,dS}
   # get the derivatives of the parametric sdf.
-  psdf   = cfg.f
-  dsdfs  = derivatives(psdf, backend)
-  fnames = fieldnames(AdaptiveKernelConfig)
-  repeated_fields = getfield.(Ref(cfg), fnames[3:end])
+  dsdfs  = derivatives(cfg.f, backend)
   # now for each one, make a new configuration and do the integration.
   derivs = map(dsdfs) do dsdf_dj
-    cfgj = AdaptiveKernelConfig(dsdf_dj, nothing, repeated_fields...)
+    cfgj = gen_new_sdf_config(cfg, dsdf_dj)
     kernel_values(cfgj, xs; verbose=false)[1]
   end
 end

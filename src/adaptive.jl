@@ -60,6 +60,11 @@ function gen_derivative_config(cfg::AdaptiveKernelConfig{S,dS}) where{S,dS}
                        quadspec=cfg.quadspec)
 end
 
+function gen_new_sdf_config(cfg::AdaptiveKernelConfig{S,dS}, new_f) where{S,dS}
+  fnames = fieldnames(AdaptiveKernelConfig)
+  AdaptiveKernelConfig(new_f, getfield.(Ref(cfg), fnames[2:end])...)
+end
+
 function compute_k0(config)
   fun = config.f
   p   = config.p

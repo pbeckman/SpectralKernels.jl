@@ -9,7 +9,7 @@ module SpectralKernels
   # for the autodiff
   using DifferentiationInterface
 
-  export AdaptiveKernelConfig, kernel_values
+  export AdaptiveKernelConfig, kernel_values, ParametricFunction
 
   const TIMER = TimerOutput()
 
@@ -18,6 +18,7 @@ module SpectralKernels
   include("quadrature.jl")
   include("adaptive.jl")
   include("derivatives.jl")
+  include("model.jl")
 
 end 
 
