@@ -1,8 +1,4 @@
 
-using ForwardDiff
-
-include("../scripts/matern_pair.jl")
-
 @testset "Matern SDF" begin
   parms = [2.14, 0.97, 0.89]
   xgrid = collect(range(0.001, 5.1, length=1_000))
@@ -33,3 +29,4 @@ include("../scripts/matern_pair.jl")
     end
   end
 end
+

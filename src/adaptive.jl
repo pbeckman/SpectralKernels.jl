@@ -52,16 +52,29 @@ function AdaptiveKernelConfig(f; df=nothing, dim=1, alpha=0.0,
     quadspec, legrule, jacrule, buffers, SplittingHeap())
 end
 
+function gen_derivative_config(cfg::AdaptiveKernelConfig{S,dS}) where{S,dS}
+  cfg.derivative && return cfg
+  AdaptiveKernelConfig(cfg.f; df=cfg.df, derivative=true, dim=cfg.dim,
+                       tol=cfg.tol, logw=cfg.logw, tail=cfg.tail,
+                       convergence_criteria=cfg.convergence_criteria,
+                       quadspec=cfg.quadspec)
+end
+
+function gen_new_sdf_config(cfg::AdaptiveKernelConfig{S,dS}, new_f) where{S,dS}
+  fnames = fieldnames(AdaptiveKernelConfig)
+  AdaptiveKernelConfig(new_f, getfield.(Ref(cfg), fnames[2:end])...)
+end
+
 function compute_k0(config)
   fun = config.f
   p   = config.p
   L   = 1.0
-  while L^p * abs(fun(L)) > abs(fun(0))/2
+  while L^p * abs(fun(L)) > abs(fun(0.0))/2
     L *= 2
   end
   config.c .* quadgk(
     w -> (w*L)^p * (config.logw ? log(w*L) : 1) * fun(w*L) * L, 
-    0, Inf, 
+    0.0, Inf, 
     atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
   )
 end
