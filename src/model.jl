@@ -12,8 +12,12 @@
 
 An object specifying a model with a covariance function given by
 
-    K(h, params) = K_iso(warp(params[warp_param_indices], h), 
-                         params[sdf_param_indices]),
+    K(x, y, params) = K_iso(|| 
+                               warp(params[warp_param_indices], x)
+                               -
+                               warp(params[warp_param_indices], y)
+                            ||,
+                            params[sdf_param_indices]),
 
 and
 
@@ -22,7 +26,7 @@ and
 The recommended interface to this object is to write your spectral density in scalar form as
 
     sdf(ω, param1, ..., paramk) = [...] # your cool model
-    warp(warp_params, h)        = [...] # your warping model if necessary
+    warp(warp_params, h)        = [...] # your warping model (if necessary)
     psdf = ParametricFunction(sdf, (param1, ..., paramk)) # note the tuple!
     global_params = vcat(warp_params, sdf_params)
     cfg = AdaptiveKernelConfig(psdf; tol=1e-12) # also other args available
@@ -32,37 +36,61 @@ The recommended interface to this object is to write your spectral density in sc
                          0, lags)
 
 """
-struct SpectralModel{S,dS,W,P1,P2,L}
+Base.@kwdef struct SpectralModel{S,dS,W,P1,P2,L}
   cfg::AdaptiveKernelConfig{S,dS}
   warp::W
-  warp_param_indices::NTuple{P1,Int64}
   sdf_param_indices::NTuple{P2,Int64}
+  warp_param_indices::NTuple{P1,Int64}
   singularity_param_index::Int64
-  lags::Vector{L}
+  pts::Vector{L}
+  pts_pairs::Vector{Tuple{Int64, Int64}} # defaults to all unique pairs.
 end
-
-# TODO (cg 2026/02/06 18:08): test all of this below.
 
 struct SpectralKernel{L,T}
-  store::Dict{L,T}
+  store::Dict{Tuple{L,L},T}
 end
 
+# TODO (cg 2026/02/09 13:28): this kernel should maybe have a stationary=true
+# argument to it or something. For points on a lattice, for example, a lot of
+# redundant compuations will happen in its current form.
+#
+# TODO (cg 2026/02/09 13:45): this is the one function that I will write a
+# custom rule for.
 function gen_kernel(sm::SpectralModel, params)
-  sdf_params  = params[sm.sdf_param_indices]
-  warp_params = params[sm.sdf_param_indices]
-  new_kernel  = ParametricFunction(sm.cfg.f.fn, tuple(sdf_params...))
-  new_cfg     = gen_new_sdf_config(sm.cfg, new_kernel)
-  warp_lags   = [sm.warp(warp_params, lagj) for lagj in sm.lags]
-  values      = kernel_values(new_cfg, warp_lags; verbose=false)[1]
-  SpectralKernel(Dict(sm.lags, values))
+  # split out the parameters as specified:
+  sdf_params  = [params[j] for j in sm.sdf_param_indices] 
+  warp_params = [params[j] for j in sm.warp_param_indices]
+  # generate a new ParametricFunction using the correct parameters, and make a
+  # new adaptive config with that new sdf.
+  new_sdf     = ParametricFunction(sm.cfg.f, tuple(sdf_params...))
+  new_cfg     = gen_new_sdf_config(sm.cfg, new_sdf)
+  # generate the warped locations.
+  warp_pts    = [sm.warp(warp_params, ptj) for ptj in sm.pts]
+  # using the sm.pts_pairs (particularly relevant if you only need O(n) elements
+  # of the covariance matrix Σ), create the pairs of both raw and warped points.
+  # Since kernel_values wants the lags to be sorted monotonically, we also
+  # generate the sortperm for warp_lags and permute both the raw_pairs (used for
+  # indexing the kernel) and warp_lags (used in kernel_values).
+  raw_pairs   = [(sm.pts[jk[1]],   sm.pts[jk[2]])        for jk in sm.pts_pairs]
+  warp_lags   = [norm(warp_pts[jk[1]] - warp_pts[jk[2]]) for jk in sm.pts_pairs]
+  sp          = sortperm(warp_lags)
+  warp_lags   = warp_lags[sp]
+  raw_pairs   = raw_pairs[sp]
+  # create the values, and return the lookup table.
+  values = kernel_values(new_cfg, warp_lags; verbose=false)[1]
+  SpectralKernel(Dict(zip(raw_pairs, values)))
 end
 
 function (sk::SpectralKernel{L,T})(x::L, y::L) where{L,T}
-  lag = x-y
-  res = get(sk.store, lag,  nothing)
+  res = get(sk.store, (x, y),  nothing)
   !isnothing(res) && return res
-  res = get(sk.store, -lag, nothing)
+  res = get(sk.store, (y, x), nothing)
   !isnothing(res) && return res
-  error("Lag $(lag) not in the `SpectralKernel` lookup table.")
+  error("Point pair ($(x), $(y)) not in the `SpectralKernel` lookup table.")
 end
+
+# just swallow the potential third argument, which may be parameters or
+# something. Maybe SpectralKernel should keep the parameters and allow a safety
+# check, but for now since it is just internal use I'll keep things fast and wild.
+(sk::SpectralKernel{L,T})(x::L, y::L, arg3) where{L,T} = sk(x, y)
 
