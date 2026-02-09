@@ -17,4 +17,3 @@ end
     include("matern_sdf.jl")
 end
 
-
