@@ -71,3 +71,22 @@ function kernel_sdf_derivatives(cfg::AdaptiveKernelConfig{ParametricFunction{S,P
   end
 end
 
+function gen_kernel_jacobian(sm::SpectralModel, params; backend)
+  # setup.
+  (cfg, warp_lags, raw_pairs, warp_params, perm1) = gen_kernel_setup(sm, params)
+  # get derivatives with respect to SDF parameters.
+  sdf_derivs = kernel_sdf_derivatives(cfg, warp_lags; backend)
+  # get kernel warping gradients.
+  warp_grads = kernel_warping_gradients(cfg, sm.warp, raw_pairs, warp_lags, 
+                                        warp_params; backend)
+  # at present, some slightly ugly but logic bug-resistant indexing to collect
+  # everything into a proper Jacobian matrix. The sm.sdf_param_indices and
+  # sm.warp_param_indices have all the information we need to re-permute the
+  # _columns_ so they can be returned in the expected order. But remember we
+  # also need to permute the _rows_ since they were re-ordered to make warp_lags
+  # sorted as required by kernel_values.
+  perm2    = vcat(collect(sm.sdf_param_indices), collect(sm.warp_param_indices))
+  J_noperm = hcat(reduce(hcat, sdf_derivs), permutedims(reduce(hcat, warp_grads)))
+  J_noperm[invperm(perm1),perm2] # the final permuted monster.
+end
+

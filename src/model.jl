@@ -50,21 +50,16 @@ struct SpectralKernel{L,T}
   store::Dict{Tuple{L,L},T}
 end
 
-# TODO (cg 2026/02/09 13:28): this kernel should maybe have a stationary=true
-# argument to it or something. For points on a lattice, for example, a lot of
-# redundant compuations will happen in its current form.
-#
-# TODO (cg 2026/02/09 13:45): this is the one function that I will write a
-# custom rule for.
-function gen_kernel(sm::SpectralModel, params)
-  # split out the parameters as specified:
+function gen_new_sdf_config(sm::SpectralModel, params)
+end
+
+function gen_kernel_setup(sm::SpectralModel, params)
+  # set up the new integration cfg.
   sdf_params  = [params[j] for j in sm.sdf_param_indices] 
-  warp_params = [params[j] for j in sm.warp_param_indices]
-  # generate a new ParametricFunction using the correct parameters, and make a
-  # new adaptive config with that new sdf.
   new_sdf     = ParametricFunction(sm.cfg.f, tuple(sdf_params...))
   new_cfg     = gen_new_sdf_config(sm.cfg, new_sdf)
-  # generate the warped locations.
+  # compute the warped points.
+  warp_params = [params[j] for j in sm.warp_param_indices]
   warp_pts    = [sm.warp(warp_params, ptj) for ptj in sm.pts]
   # using the sm.pts_pairs (particularly relevant if you only need O(n) elements
   # of the covariance matrix Σ), create the pairs of both raw and warped points.
@@ -73,10 +68,23 @@ function gen_kernel(sm::SpectralModel, params)
   # indexing the kernel) and warp_lags (used in kernel_values).
   raw_pairs   = [(sm.pts[jk[1]],   sm.pts[jk[2]])        for jk in sm.pts_pairs]
   warp_lags   = [norm(warp_pts[jk[1]] - warp_pts[jk[2]]) for jk in sm.pts_pairs]
+  # apply the permutation so that the warp_lags are sorted, as required by
+  # kernel_values.
   sp          = sortperm(warp_lags)
   warp_lags   = warp_lags[sp]
   raw_pairs   = raw_pairs[sp]
-  # create the values, and return the lookup table.
+  # return the necessary internal objects.
+  (new_cfg, warp_lags, raw_pairs, warp_params, sp)
+end
+
+# TODO (cg 2026/02/09 13:28): this kernel should maybe have a stationary=true
+# argument to it or something. For points on a lattice, for example, a lot of
+# redundant compuations will happen in its current form.
+#
+# TODO (cg 2026/02/09 13:45): this is the one function that I will write a
+# custom rule for.
+function gen_kernel(sm::SpectralModel, params)
+  (new_cfg, warp_lags, _, _, _) = gen_kernel_setup(sm, params)
   values = kernel_values(new_cfg, warp_lags; verbose=false)[1]
   SpectralKernel(Dict(zip(raw_pairs, values)))
 end

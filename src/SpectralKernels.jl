@@ -7,7 +7,7 @@ module SpectralKernels
   import SpecialFunctions: gamma, sinint, expint, besselj
 
   # for the autodiff
-  using DifferentiationInterface
+  using DifferentiationInterface, ChainRulesCore
 
   export AdaptiveKernelConfig, kernel_values, ParametricFunction, SpectralModel
 
@@ -17,8 +17,8 @@ module SpectralKernels
   include("utils.jl")
   include("quadrature.jl")
   include("adaptive.jl")
-  include("derivatives.jl")
   include("model.jl")
+  include("derivatives.jl")
 
 end 
 
