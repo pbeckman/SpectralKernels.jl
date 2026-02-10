@@ -1,11 +1,13 @@
 
 using BesselK, HypergeometricFunctions, Printf
 
+gamma(t) = BesselK._gamma(t)
+
 # Isotropic Matern covariance with parameters p evaluated at distance t
 function matern_cov(t, p; d=1)
   (phi, alpha, v) = p
     constant  = pi^(d/2)*phi
-    constant /= (2^(v-1))*BesselK._gamma(v+d/2)*alpha^(2*v)
+    constant /= (2^(v-1))*gamma(v+d/2)*alpha^(2*v)
     arg = alpha*2pi*abs(t)
     iszero(arg) && return constant*BesselK.adbesselkxv(v, 0)
     constant*BesselK.adbesselk(v, arg)*(arg^v)

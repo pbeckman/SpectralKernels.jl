@@ -6,13 +6,19 @@ module SpectralKernels
   using TimerOutputs # not stdlibs
   import SpecialFunctions: gamma, sinint, expint, besselj
 
-  export AdaptiveKernelConfig, kernel_values
+  # for the autodiff
+  using DifferentiationInterface
+
+  export AdaptiveKernelConfig, kernel_values, ParametricFunction, SpectralModel
 
   const TIMER = TimerOutput()
 
+  include("wrappers.jl")
   include("utils.jl")
   include("quadrature.jl")
   include("adaptive.jl")
+  include("model.jl")
+  include("derivatives.jl")
 
 end 
 
