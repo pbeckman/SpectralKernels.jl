@@ -84,7 +84,7 @@ end
 # TODO (cg 2026/02/09 13:45): this is the one function that I will write a
 # custom rule for.
 function gen_kernel(sm::SpectralModel, params)
-  (new_cfg, warp_lags, _, _, _) = gen_kernel_setup(sm, params)
+  (new_cfg, warp_lags, raw_pairs, _, _) = gen_kernel_setup(sm, params)
   values = kernel_values(new_cfg, warp_lags; verbose=false)[1]
   SpectralKernel(Dict(zip(raw_pairs, values)))
 end

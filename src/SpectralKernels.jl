@@ -7,7 +7,7 @@ module SpectralKernels
   import SpecialFunctions: gamma, sinint, expint, besselj
 
   # for the autodiff
-  using DifferentiationInterface, ChainRulesCore
+  using DifferentiationInterface
 
   export AdaptiveKernelConfig, kernel_values, ParametricFunction, SpectralModel
 
