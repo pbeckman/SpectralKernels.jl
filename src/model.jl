@@ -1,7 +1,8 @@
 
-# TODO (cg 2026/02/06 18:02): maybe a compile-time check to make sure that the
-# eltype of lags (like, if it is a Vector{SVector{2,Float64}}) matches the
-# reported dimension in the AdaptiveKernelConfig object.
+struct NoWarping end
+
+(nw::NoWarping)(params, x) = x
+
 """
     SpectralModel(cfg::AdaptiveKernelConfig,
                   warp,
@@ -43,14 +44,31 @@ Base.@kwdef struct SpectralModel{S,dS,W,P1,P2,L}
   warp_param_indices::NTuple{P1,Int64}
   singularity_param_index::Int64
   pts::Vector{L}
-  pts_pairs::Vector{Tuple{Int64, Int64}} # defaults to all unique pairs.
+  kernel_index_pairs::Vector{Tuple{Int64, Int64}} # defaults to all unique pairs.
+  verbose::Bool
 end
+
+function dense_index_pairs(pts)
+  allpairs = vec(collect(Iterators.product(eachindex(pts), eachindex(pts)))) 
+  filter!(x->x[1] <= x[2], allpairs)
+  allpairs
+end
+
+# TODO (cg 2026/02/10 14:38): At present undocumented while we discuss what this
+# front-end constructor should look like.
+function SpectralModel(sdf, pts; warp=NoWarping(),
+                       kernel_index_pairs=dense_index_pairs(pts),
+                       sdf_param_indices, warp_param_indices=(),
+                       singularity_param_index=0, verbose=false, kwargs...)
+  cfg = AdaptiveKernelConfig(sdf; dim=length(first(pts)), kwargs...)
+  SpectralModel(cfg, warp, tuple(sdf_param_indices...),
+                tuple(warp_param_indices...), singularity_param_index,
+                pts, kernel_index_pairs, verbose)
+end
+
 
 struct SpectralKernel{L,T}
   store::Dict{Tuple{L,L},T}
-end
-
-function gen_new_sdf_config(sm::SpectralModel, params)
 end
 
 function gen_kernel_setup(sm::SpectralModel, params)
@@ -61,20 +79,12 @@ function gen_kernel_setup(sm::SpectralModel, params)
   # compute the warped points.
   warp_params = [params[j] for j in sm.warp_param_indices]
   warp_pts    = [sm.warp(warp_params, ptj) for ptj in sm.pts]
-  # using the sm.pts_pairs (particularly relevant if you only need O(n) elements
+  # using the sm.kernel_index_pairs (particularly relevant if you only need O(n) elements
   # of the covariance matrix Σ), create the pairs of both raw and warped points.
-  # Since kernel_values wants the lags to be sorted monotonically, we also
-  # generate the sortperm for warp_lags and permute both the raw_pairs (used for
-  # indexing the kernel) and warp_lags (used in kernel_values).
-  raw_pairs   = [(sm.pts[jk[1]],   sm.pts[jk[2]])        for jk in sm.pts_pairs]
-  warp_lags   = [norm(warp_pts[jk[1]] - warp_pts[jk[2]]) for jk in sm.pts_pairs]
-  # apply the permutation so that the warp_lags are sorted, as required by
-  # kernel_values.
-  sp          = sortperm(warp_lags)
-  warp_lags   = warp_lags[sp]
-  raw_pairs   = raw_pairs[sp]
+  raw_pairs   = [(sm.pts[jk[1]],   sm.pts[jk[2]])        for jk in sm.kernel_index_pairs]
+  warp_lags   = [norm(warp_pts[jk[1]] - warp_pts[jk[2]]) for jk in sm.kernel_index_pairs]
   # return the necessary internal objects.
-  (new_cfg, warp_lags, raw_pairs, warp_params, sp)
+  (new_cfg, warp_lags, raw_pairs, warp_params)
 end
 
 # TODO (cg 2026/02/09 13:28): this kernel should maybe have a stationary=true
@@ -84,8 +94,8 @@ end
 # TODO (cg 2026/02/09 13:45): this is the one function that I will write a
 # custom rule for.
 function gen_kernel(sm::SpectralModel, params)
-  (new_cfg, warp_lags, raw_pairs, _, _) = gen_kernel_setup(sm, params)
-  values = kernel_values(new_cfg, warp_lags; verbose=false)[1]
+  (new_cfg, warp_lags, raw_pairs, _) = gen_kernel_setup(sm, params)
+  values = kernel_values(new_cfg, warp_lags; verbose=sm.verbose)[1]
   SpectralKernel(Dict(zip(raw_pairs, values)))
 end
 

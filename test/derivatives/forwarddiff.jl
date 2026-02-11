@@ -20,7 +20,7 @@
 
   model = SpectralModel(;cfg=cfg, warp=warp, sdf_param_indices=(1,),
                         warp_param_indices=(2,), singularity_param_index=0,
-                        pts=xgrid, pts_pairs=xpairs)
+                        pts=xgrid, kernel_index_pairs=xpairs, verbose=false)
 
   function baseline_kernel_sum(params)
     sum(jk->kernel(xgrid[jk[1]], xgrid[jk[2]], params), xpairs)

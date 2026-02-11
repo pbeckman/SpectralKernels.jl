@@ -73,7 +73,7 @@ end
 
 function gen_kernel_jacobian(sm::SpectralModel, params; backend)
   # setup.
-  (cfg, warp_lags, raw_pairs, warp_params, perm1) = gen_kernel_setup(sm, params)
+  (cfg, warp_lags, raw_pairs, warp_params) = gen_kernel_setup(sm, params)
   # get derivatives with respect to SDF parameters.
   sdf_derivs = kernel_sdf_derivatives(cfg, warp_lags; backend)
   # get kernel warping gradients.
@@ -87,6 +87,6 @@ function gen_kernel_jacobian(sm::SpectralModel, params; backend)
   # sorted as required by kernel_values.
   perm2    = vcat(collect(sm.sdf_param_indices), collect(sm.warp_param_indices))
   J_noperm = hcat(reduce(hcat, sdf_derivs), permutedims(reduce(hcat, warp_grads)))
-  J_noperm[invperm(perm1),perm2] # the final permuted monster.
+  J_noperm[:,perm2] # the final permuted monster.
 end
 

@@ -20,7 +20,7 @@
 
   model = SpectralModel(;cfg=cfg, warp=warp, sdf_param_indices=(1,),
                         warp_param_indices=(2,), singularity_param_index=0,
-                        pts=xgrid, pts_pairs=xpairs)
+                        pts=xgrid, kernel_index_pairs=xpairs, verbose=false)
 
   J_test = SpectralKernels.gen_kernel_jacobian(model, test_params; backend=backend)
 
