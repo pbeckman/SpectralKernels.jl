@@ -10,12 +10,12 @@ module SpectralKernelsForwardDiffExt
     out = SpectralKernels.gen_kernel(sm, params_primal)
     J   = SpectralKernels.gen_kernel_jacobian(sm, params_primal; 
                                               backend=SpectralKernels.AutoForwardDiff())
-    _keys = collect(keys(out.store))
-    vec_of_duals = map(enumerate(_keys)) do (j, key_j)
-      partials = ntuple(k -> sum(J[j, m] * params[m].partials[k] for m = 1:length(params)), N)
-      ForwardDiff.Dual{T}(out.store[key_j], partials)
+    dual_pairs = map(enumerate(sm.kernel_index_pairs)) do (j, ik)
+      (ptj, ptk) = (sm.pts[ik[1]], sm.pts[ik[2]])
+      partials   = ntuple(k -> sum(J[j, m] * params[m].partials[k] for m = 1:length(params)), N)
+      (ptj, ptk) => ForwardDiff.Dual{T}(out.store[(ptj, ptk)], partials)
     end
-    SpectralKernels.SpectralKernel(Dict(zip(_keys, vec_of_duals)))
+    SpectralKernels.SpectralKernel(Dict(dual_pairs))
   end
 
 end

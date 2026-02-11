@@ -83,7 +83,12 @@ quadsz(ac::AdaptiveKernelConfig) = prod(ac.quadspec)
 
 function kernel_values(config::AdaptiveKernelConfig{S,dS},
                        xs::AbstractVector{Float64}; verbose=false) where{S,dS}
-  issorted(xs) || throw(error("locations must be provided in sorted order."))
+  if !issorted(xs) 
+    sp = sortperm(xs)
+    ip = invperm(sp)
+    (sorted_kv, sorted_err) = kernel_values(config, xs[sp]; verbose=verbose)
+    return (sorted_kv[ip], sorted_err[ip])
+  end
   # allocate some full-length buffers to re-use throughout the main loop:
   (ks, errs) = (zeros(Float64, length(xs)) for _ in 1:2)
   highest_unconv_ix = length(xs)
