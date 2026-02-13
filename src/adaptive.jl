@@ -83,10 +83,20 @@ quadsz(ac::AdaptiveKernelConfig) = prod(ac.quadspec)
 
 function kernel_values(config::AdaptiveKernelConfig{S,dS},
                        xs::AbstractVector{Float64}; verbose=false) where{S,dS}
+  uxs = unique(xs)
+  verbose && println("Reducing $(length(xs)) to $(length(uxs)) unique lags for evaluation...")
+  (uvals, uerrors) = _kernel_values(config, uxs; verbose=verbose)
+  val_lookup = Dict(zip(uxs, uvals))
+  err_lookup = Dict(zip(uxs, uerrors))
+  ([val_lookup[x] for x in xs], [err_lookup[x] for x in xs])
+end
+
+function _kernel_values(config::AdaptiveKernelConfig{S,dS},
+                        xs::AbstractVector{Float64}; verbose=false) where{S,dS}
   if !issorted(xs) 
     sp = sortperm(xs)
     ip = invperm(sp)
-    (sorted_kv, sorted_err) = kernel_values(config, xs[sp]; verbose=verbose)
+    (sorted_kv, sorted_err) = _kernel_values(config, xs[sp]; verbose=verbose)
     return (sorted_kv[ip], sorted_err[ip])
   end
   # allocate some full-length buffers to re-use throughout the main loop:
