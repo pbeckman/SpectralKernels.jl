@@ -36,7 +36,6 @@
     v   = ones(length(pts))
     ker = gen_kernel(model, params)
     M   = [ker(ptj, ptk) for ptj in pts, ptk in pts]
-    M[1,1] = M[2,2] # TODO (cg 2026/02/10 17:56): wat
     Mf  = cholesky!(Symmetric(M))
     (logdet(Mf) + sum(abs2, Mf.U'\v))/2
   end

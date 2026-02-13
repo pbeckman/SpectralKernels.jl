@@ -89,7 +89,7 @@ end
 
 # TODO (cg 2026/02/09 13:28): this kernel should maybe have a stationary=true
 # argument to it or something. For points on a lattice, for example, a lot of
-# redundant compuations will happen in its current form.
+# redundant computations will happen in its current form.
 #
 # TODO (cg 2026/02/09 13:45): this is the one function that I will write a
 # custom rule for.

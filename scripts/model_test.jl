@@ -46,10 +46,5 @@ kern = SpectralKernels.gen_kernel(model, (2.5, 1.0, 0.1))
 # Now we can treat this like a normal function and make a matrix as usual.
 M = [kern(xj, xk) for xj in pts, xk in pts]
 
-# TODO (cg 2026/02/09 13:33): Weirdly, when both inputs are zero,
-# K(warp(0)-warp(0)) has a specific correctness issue. Maybe something I
-# introduced in refactoring.
-M[1,1] = M[2,2]
-
 sim = cholesky(Symmetric(M)).L*randn(length(pts), 3)
 

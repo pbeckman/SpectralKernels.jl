@@ -35,7 +35,7 @@ function AdaptiveKernelConfig(f; df=nothing, dim=1, alpha=0.0,
     quadspec = (2^12, 1)
   end
 
-  p = alpha + (dim == 2) + derivative
+  p = alpha + (dim == 2) + derivative # (pb 2/13/26) : shouldn't this be -alpha?
   c = (dim == 1) ? 2.0 : 2pi
   if derivative; c *= -2pi; end
 
@@ -83,10 +83,20 @@ quadsz(ac::AdaptiveKernelConfig) = prod(ac.quadspec)
 
 function kernel_values(config::AdaptiveKernelConfig{S,dS},
                        xs::AbstractVector{Float64}; verbose=false) where{S,dS}
+  uxs = unique(xs)
+  verbose && println("Reducing $(length(xs)) to $(length(uxs)) unique lags for evaluation...")
+  (uvals, uerrors) = _kernel_values(config, uxs; verbose=verbose)
+  val_lookup = Dict(zip(uxs, uvals))
+  err_lookup = Dict(zip(uxs, uerrors))
+  ([val_lookup[x] for x in xs], [err_lookup[x] for x in xs])
+end
+
+function _kernel_values(config::AdaptiveKernelConfig{S,dS},
+                        xs::AbstractVector{Float64}; verbose=false) where{S,dS}
   if !issorted(xs) 
     sp = sortperm(xs)
     ip = invperm(sp)
-    (sorted_kv, sorted_err) = kernel_values(config, xs[sp]; verbose=verbose)
+    (sorted_kv, sorted_err) = _kernel_values(config, xs[sp]; verbose=verbose)
     return (sorted_kv[ip], sorted_err[ip])
   end
   # allocate some full-length buffers to re-use throughout the main loop:
@@ -103,7 +113,10 @@ function kernel_values(config::AdaptiveKernelConfig{S,dS},
   @timeit TIMER "K(0)" begin
     (k0, k0_err) = compute_k0(config)
   end
-  if iszero(xs[1])
+  # first index containing x > 0 so we know which indices to add panels to
+  ix1 = 1
+  if !config.derivative && iszero(xs[1])
+    ix1 = 2
     ks[1], errs[1] = (k0, k0_err)
   end
 
@@ -117,13 +130,13 @@ function kernel_values(config::AdaptiveKernelConfig{S,dS},
     # add kernel values and quadrature errors from this panel to buffers
     @timeit TIMER "interval integral" begin
       (panel_ks, panel_errs) = fourier_integrate_interval(
-        a, b, config, xs[1:highest_unconv_ix], abs(k0), verbose
+        a, b, config, xs[ix1:highest_unconv_ix], abs(k0), verbose
         )
     end
     # add integral of new panel and panel quadrature error
     @timeit TIMER "add panels to integral" begin
-      view(ks,   1:highest_unconv_ix) .+= panel_ks
-      view(errs, 1:highest_unconv_ix) .+= panel_errs
+      view(ks,   ix1:highest_unconv_ix) .+= panel_ks
+      view(errs, ix1:highest_unconv_ix) .+= panel_errs
     end
     # estimate tail power law prefactor and decay rate
     @timeit TIMER "estimate tail decay" begin
@@ -144,12 +157,13 @@ function kernel_values(config::AdaptiveKernelConfig{S,dS},
     @timeit TIMER "check convergence" begin
       conv = true
       ix   = highest_unconv_ix
-      while conv && ix > 0
+      while conv && ix >= ix1
         trunc_err = (conv_crit == :panel) ? 0 : truncation_error_estimate(
           b, xs[ix], c, d, config.dim
           )
         conv = check_convergence(
-          trunc_err, panel_ks[ix], config.tol*abs(k0)/2, criteria=conv_crit
+          trunc_err, panel_ks[ix-ix1+1], 
+          config.tol*abs(k0)/2, criteria=conv_crit
           )
         if conv
           errs[ix] += 2*trunc_err
