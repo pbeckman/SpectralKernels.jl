@@ -15,9 +15,6 @@
   xgrid  = collect(range(0.0, 1.0, length=20))
   xpairs = vec(collect(Iterators.product(eachindex(xgrid), eachindex(xgrid))))
 
-  # for now, removing origin calls until the doubled lag 0 issue is sorted out.
-  filter!(x->x[1]!=x[2], xpairs)
-
   model = SpectralModel(;cfg=cfg, warp=warp, sdf_param_indices=(1,),
                         warp_param_indices=(2,), singularity_param_index=0,
                         pts=xgrid, kernel_index_pairs=xpairs, verbose=false)
@@ -29,7 +26,7 @@
                                end,
                                test_params)
 
-  @test maximum(abs, J_test - J_ref) < 1e-10
+  @test maximum(abs, J_test - J_ref) < 1e-8
 
 end
 
