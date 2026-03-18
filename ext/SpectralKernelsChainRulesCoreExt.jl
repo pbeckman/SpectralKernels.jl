@@ -1,7 +1,7 @@
 
-module SpectralKernelsForwardDiffExt
+module SpectralKernelsChainRulesCoreExt
 
-  using SpectralKernels, ForwardDiff
+  using SpectralKernels, ForwardDiff, ChainRulesCore
   import SpectralKernels: gen_kernel, gen_kernel_jacobian
 
   # Not presently in use---I thought that DifferentiationInterface.jl somehow made
