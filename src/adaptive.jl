@@ -30,12 +30,16 @@ function AdaptiveKernelConfig(f; df=nothing, dim=1, alpha=0.0,
     error("Argument convergence_criteria must be one of :panel, :tails, :both.")
   end
 
+  if alpha >= dim
+    error("alpha must be less than dim to be integrable.")
+  end
+
   if tol < 1e-12 && prod(quadspec) > 2^12
     @warn("Tolerances ε < 1e-12 are not recommended. Switching to a smaller quadrature rule for higher accuracy (but slower) computations.")
     quadspec = (2^12, 1)
   end
 
-  p = alpha + (dim == 2) + derivative # (pb 2/13/26) : shouldn't this be -alpha?
+  p = -alpha + (dim == 1 ? 0 : dim/2) + derivative
   c = (dim == 1) ? 2.0 : 2pi
   if derivative; c *= -2pi; end
 
@@ -69,11 +73,13 @@ function compute_k0(config)
   fun = config.f
   p   = config.p
   L   = 1.0
+  nu  = config.dim == 1 ? 0 : config.dim/2 - 1
   while L^p * abs(fun(L)) > abs(fun(0.0))/2
     L *= 2
   end
+  # lim_{r→0} J_ν(2πωr) / r^ν = (πω)^ν / Γ(ν+1)
   config.c .* quadgk(
-    w -> (w*L)^p * (config.logw ? log(w*L) : 1) * fun(w*L) * L, 
+    w -> (pi*w)^nu/gamma(nu+1) * (w*L)^p * (config.logw ? log(w*L) : 1) * fun(w*L) * L, 
     0.0, Inf, 
     atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
   )
