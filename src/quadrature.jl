@@ -94,7 +94,7 @@ function updatequadbufs!(buffers, legrule::QuadRule, jacrule::QuadRule, f::F, a,
   (no1, buf1, no2, buf2)
 end
 
-function fourier_integrate_panel(buffers, legrule::QuadRule, jacrule::QuadRule, f, a, b, xs; p=0, kernel=:cis)
+function fourier_integrate_panel(buffers, legrule::QuadRule, jacrule::QuadRule, f, a, b, xs; p=0, kernel=:cis, tol=1e-15)
   check_subdivide_failure(a, b, xs)
   @timeit TIMER "update quadrature buffers" begin
     (no1, buf1, no2, buf2) = updatequadbufs!(
@@ -134,12 +134,12 @@ function fourier_integrate_panel(buffers, legrule::QuadRule, jacrule::QuadRule, 
       int1 = imag.(int1)
       int2 = imag.(int2)
     end
-  else
-    nu = (kernel == :J0) ? 0 : 1
+  elseif length(kernel) == 2 && kernel[1] == :J
+    nu = Int64(kernel[2])
     if fast
       @timeit TIMER "NUFHT call" begin
-        int1 = nufht(nu, no1, buf1, 2pi*xs; tol=1e-15)
-        int2 = nufht(nu, no2, buf2, 2pi*xs; tol=1e-15)
+        int1 = nufht(nu, no1, buf1, 2pi*xs; tol=tol)
+        int2 = nufht(nu, no2, buf2, 2pi*xs; tol=tol)
       end
     else
       @timeit TIMER "direct Bessel summation" begin
@@ -159,6 +159,8 @@ function fourier_integrate_panel(buffers, legrule::QuadRule, jacrule::QuadRule, 
         end
       end
     end
+  else
+    error("integral kernel must be :cis, :sin, :cos, or (:J, nu)")
   end
   any(isnan, int1) || any(isnan, int2) && throw(error("NaN detected in panel integral..."))
   (int1, int2)
@@ -173,14 +175,14 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose)
   if config.dim == 1
     kernel = config.derivative ? :sin : :cos
   else
-    kernel = config.derivative ? :J1 : :J0
+    kernel = config.derivative ? (:J, config.dim/2) : (:J, config.dim/2-1)
   end
   while !isempty(intervalheap)
     # take a (sub-)interval:
     (_a, _b, _tol) = pop!(intervalheap)
     # now pick a rule and integrand based on p and where (_a, _b) is:
     if _a == 0.0 && config.p != 0.0
-      # TODO (pb 1/16/26) : implement log singularity for dim = 2
+      # TODO (pb 1/16/26) : implement log singularity for dim > 1
       if config.logw
         # use integration by parts to evaluate the Fourier integral with an
         # additional log(w) singularity
@@ -189,12 +191,14 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose)
           (I1a, I2a) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
             w -> fun(w) + w*log(w)*df(w),
-            _a, _b, xs, kernel=:cis, p=config.p
+            _a, _b, xs, kernel=:cis, p=config.p, 
+            tol=max(1e-15, config.tol/100)
             )
           (I1b, I2b) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
             w -> w*log(w)*f(w),
-            _a, _b, xs, kernel=:cis, p=config.p
+            _a, _b, xs, kernel=:cis, p=config.p,
+            tol=max(1e-15, config.tol/100)
             )
         end
         I1 = (I0 .- real(I1a) .+ 2pi*xs .* imag.(I1b)) / (-config.alpha+1)
@@ -204,7 +208,8 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose)
           (I1, I2) = fourier_integrate_panel(
             config.buffers, config.legrule, config.jacrule,
             w -> f(w),
-            _a, _b, xs, kernel=kernel, p=config.p
+            _a, _b, xs, kernel=kernel, p=config.p,
+            tol=max(1e-15, config.tol/100)
             )
         end
       end
@@ -213,14 +218,22 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose)
         (I1, I2) = fourier_integrate_panel(
           config.buffers, config.legrule, config.jacrule,
           w -> w^config.p * (config.logw ? log(w) : 1) * f(w), 
-          _a, _b, xs, kernel=kernel
+          _a, _b, xs, kernel=kernel,
+          tol=max(1e-15, config.tol/100)
           )
+      end
+    end
+    # apply the multiplicative prefactor to the computed integrals
+    for Ik in (I1, I2)
+      Ik .*= config.c
+      if config.dim > 1
+        Ik ./= xs.^(config.dim/2 - 1)
       end
     end
     # now analyze the error and decide if you need to split more:
     _err = abs.(I2 - I1)
     max_I_error = maximum(_err)
-    verbose && print_panel_convergence(max_I_error, _tol, _a, _b)
+    verbose && print_panel_convergence(max_I_error/k0, _tol, _a, _b)
     if max_I_error < config.tol*k0
       I   .+= I2
       err .+= _err
@@ -235,6 +248,6 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose)
     end
   end
   drain(intervalheap)
-  return config.c .* (I, err)
+  return (I, err)
 end
 
