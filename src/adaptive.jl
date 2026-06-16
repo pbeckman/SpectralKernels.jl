@@ -113,7 +113,7 @@ function _kernel_values(config::AdaptiveKernelConfig{S,dS},
     sp = sortperm(xs)
     ip = invperm(sp)
     (sorted_kv, sorted_err) = _kernel_values(
-      config, xs[sp], k0; verbose=verbose
+      config, xs[sp], k0; param_derivative=param_derivative, verbose=verbose 
       )
     return (sorted_kv[ip], sorted_err[ip])
   end
@@ -132,8 +132,8 @@ function _kernel_values(config::AdaptiveKernelConfig{S,dS},
   if iszero(xs[1])
     ix1 = 2
     if config.derivative 
-      # don't compute K'(0) as it may be undefined
-      ks[1], errs[1] = (NaN, NaN)
+      # set K'(0)=0 although it may be undefined
+      ks[1], errs[1] = (0, NaN)
     elseif param_derivative 
       # compute ∂K/∂θ(0) and just use k0=K(0) for error estimation
       dk0 = compute_k0(config)

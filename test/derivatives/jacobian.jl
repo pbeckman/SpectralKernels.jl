@@ -22,10 +22,10 @@
   k0 = SpectralKernels.compute_k0(cfg; params=test_params[1])
   J_test = SpectralKernels.gen_kernel_jacobian(model, test_params, k0; backend=backend)
 
-  J_ref = ForwardDiff.jacobian(params -> begin
-                                 [kernel(xgrid[jk[1]], xgrid[jk[2]], params) for jk in xpairs]
-                               end,
-                               test_params)
+  J_ref = ForwardDiff.jacobian(
+    params -> [kernel(xgrid[jk[1]], xgrid[jk[2]], params) for jk in xpairs],
+    test_params
+    )
 
   @test maximum(abs, J_test - J_ref) < 1e-8
 
