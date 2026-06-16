@@ -67,7 +67,7 @@ function kernel_sdf_derivatives(cfg::AdaptiveKernelConfig{ParametricFunction{S,P
   # now for each one, make a new configuration and do the integration.
   derivs = map(dsdfs) do dsdf_dj
     cfgj = gen_new_sdf_config(cfg, dsdf_dj)
-    kernel_values(cfgj, xs; k0=k0, verbose=false)[1]
+    kernel_values(cfgj, xs; k0=k0, param_derivative=true, verbose=false)[1]
   end
 end
 

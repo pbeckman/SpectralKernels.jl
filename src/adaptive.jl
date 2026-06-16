@@ -93,18 +93,22 @@ quadsz(ac::AdaptiveKernelConfig) = prod(ac.quadspec)
 
 function kernel_values(config::AdaptiveKernelConfig{S,dS},
                     xs::AbstractVector{Float64}; 
-                    k0=compute_k0(config),
+                    k0=compute_k0(config), param_derivative=false,
                     verbose=false) where{S,dS}
   uxs = unique(xs)
   verbose && println("Reducing $(length(xs)) to $(length(uxs)) unique lags for evaluation...")
-  (uvals, uerrors) = _kernel_values(config, uxs, k0; verbose=verbose)
+  (uvals, uerrors) = _kernel_values(
+    config, uxs, k0; 
+    verbose=verbose, param_derivative=param_derivative
+    )
   val_lookup = Dict(zip(uxs, uvals))
   err_lookup = Dict(zip(uxs, uerrors))
   ([val_lookup[x] for x in xs], [err_lookup[x] for x in xs])
 end
 
 function _kernel_values(config::AdaptiveKernelConfig{S,dS},
-                        xs::AbstractVector{Float64}, k0; verbose=false) where{S,dS}
+                        xs::AbstractVector{Float64}, k0; 
+                        param_derivative=false, verbose=false) where{S,dS}
   if !issorted(xs) 
     sp = sortperm(xs)
     ip = invperm(sp)
@@ -127,9 +131,15 @@ function _kernel_values(config::AdaptiveKernelConfig{S,dS},
   ix1 = 1
   if iszero(xs[1])
     ix1 = 2
-    if config.derivative # don't compute K'(0) as it may be undefined
+    if config.derivative 
+      # don't compute K'(0) as it may be undefined
       ks[1], errs[1] = (NaN, NaN)
-    else # K(0) has already been computed
+    elseif param_derivative 
+      # compute ∂K/∂θ(0) and just use k0=K(0) for error estimation
+      dk0 = compute_k0(config)
+      ks[1], errs[1] = (dk0, NaN)
+    else 
+      # K(0) has already been computed
       ks[1], errs[1] = (k0, NaN)
     end
   end

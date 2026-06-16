@@ -7,7 +7,7 @@
 
   cfg    = AdaptiveKernelConfig(psdf; tol=1e-12)
 
-  xs     = collect(range(0.01, 3.5, length=30))
+  xs     = collect(range(0.0, 3.5, length=30))
   k0     = SpectralKernels.compute_k0(cfg)
   derivs = SpectralKernels.kernel_sdf_derivatives(cfg, xs, k0; backend=AutoForwardDiff())
 
