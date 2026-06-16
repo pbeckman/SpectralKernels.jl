@@ -13,13 +13,11 @@ module SpectralKernelsForwardDiffExt
       sm, params_primal, k0; 
       backend=SpectralKernels.AutoForwardDiff()
       )
-    @show J
     dual_pairs = map(enumerate(sm.kernel_index_pairs)) do (j, ik)
       (ptj, ptk) = (sm.pts[ik[1]], sm.pts[ik[2]])
       partials   = ntuple(k -> sum(J[j, m] * params[m].partials[k] for m = 1:length(params)), N)
       (ptj, ptk) => ForwardDiff.Dual{T}(out.store[(ptj, ptk)], partials)
     end
-    @show dual_pairs
     SpectralKernels.SpectralKernel(Dict(dual_pairs))
   end
 
