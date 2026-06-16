@@ -112,3 +112,30 @@ end
 # check, but for now since it is just internal use I'll keep things fast and wild.
 (sk::SpectralKernel{L,T})(x::L, y::L, arg3) where{L,T} = sk(x, y)
 
+"""
+`SpectralLikelihood(model::SpectralModel, spec)`
+
+Creates a `SpectralLikelihood`, the top-most abstraction over the integration
+types that returns an object that accepts a single argument (parameters) and can
+be differentiated with, e.g., `ForwardDiff.gradient`. Arguments are:
+
+- `model::SpectralModel`: A `SpectralModel` object (please see the relevant docstrings for that).
+- `spec`: *some* kind of specification of a likelihood. In general, this is a
+place where you should expect to find/develop your own extensions. See the
+extension for `Vecchia.jl` for an example.
+"""
+struct SpectralLikelihood{S,C}
+  model::S
+  spec::C
+end
+
+# Just so the REPL doesn't give a screen full of spaghetti.
+function Base.display(sl::SpectralLikelihood{S,C}) where{S,C}
+  println("SpectralLikelihood:")
+  println("  - dimension:                 $(sl.model.cfg.dim)")
+  println("  - integration tolerance:     $(sl.model.cfg.tol)")
+  println("  - likelihood type:           $C")
+end
+
+function simulate end
+

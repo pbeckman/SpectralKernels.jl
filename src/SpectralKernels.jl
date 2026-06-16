@@ -9,7 +9,7 @@ module SpectralKernels
   # for the autodiff
   using DifferentiationInterface
 
-  export AdaptiveKernelConfig, kernel_values, ParametricFunction, SpectralModel, gen_kernel
+  export AdaptiveKernelConfig, kernel_values, ParametricFunction, SpectralModel, gen_kernel, SpectralLikelihood, simulate
 
   const TIMER = TimerOutput()
 
