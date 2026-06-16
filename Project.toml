@@ -22,10 +22,12 @@ ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 HypergeometricFunctions = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Vecchia = "8d73829f-f4b0-474a-9580-cecc8e084068"
 
 [extensions]
 SpectralKernelsChainRulesCoreExt = ["ChainRulesCore", "ForwardDiff"]
 SpectralKernelsForwardDiffExt = ["ForwardDiff"]
+SpectralKernelsVecchiaExt = ["Vecchia", "ForwardDiff"]
 
 [compat]
 ChainRulesCore = "1.26.0"
