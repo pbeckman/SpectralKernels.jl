@@ -66,7 +66,6 @@ function SpectralModel(sdf, pts; warp=NoWarping(),
                 pts, kernel_index_pairs, verbose)
 end
 
-
 struct SpectralKernel{L,T}
   store::Dict{Tuple{L,L},T}
 end

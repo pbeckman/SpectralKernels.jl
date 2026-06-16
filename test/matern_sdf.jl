@@ -37,7 +37,7 @@ end
   xgrid = collect(range(0.0, 1.1, length=1_000))
 
   for dim in [1, 2, 4]
-    alpha = (dim == 2) + 0.1
+    alpha = (dim-1) + 0.1
     @testset "(dim=$(dim))" begin
       S(w)  = matern_sdf(w, parms; d=dim)
       K(r)  = sing_matern_cov(r, [parms; -alpha]; d=dim)

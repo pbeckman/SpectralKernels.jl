@@ -3,12 +3,14 @@
   S(w)  = exp(-abs(w))
   K(r)  = 2 / (1 + (2*pi*r)^2)
   dK(r) = -(16pi^2*r) / (1 + (2*pi*r)^2)^2
-  
-  xgrid = collect(range(0.001, 5.1, length=1_000))
 
   for derivative in [false, true]
+    xgrid = collect(range(0.0, 5.1, length=1_000))
+    if derivative
+      xgrid = xgrid[2:end]
+    end
     @testset "(derivative=$(derivative))" begin
-      for tol in (1e-8, 1e-10, 1e-12)
+      for tol in (1e-4, 1e-8, 1e-10, 1e-12)
         true_values = derivative ? dK.(xgrid) : K.(xgrid)
         @testset "(tol=$(tol))" begin
           cfg = SpectralKernels.AdaptiveKernelConfig(

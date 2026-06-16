@@ -19,7 +19,8 @@
                         warp_param_indices=(2,), singularity_param_index=0,
                         pts=xgrid, kernel_index_pairs=xpairs, verbose=false)
 
-  J_test = SpectralKernels.gen_kernel_jacobian(model, test_params; backend=backend)
+  k0 = SpectralKernels.compute_k0(cfg; params=test_params[1])
+  J_test = SpectralKernels.gen_kernel_jacobian(model, test_params, k0; backend=backend)
 
   J_ref = ForwardDiff.jacobian(params -> begin
                                  [kernel(xgrid[jk[1]], xgrid[jk[2]], params) for jk in xpairs]

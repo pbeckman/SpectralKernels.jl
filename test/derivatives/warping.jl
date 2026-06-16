@@ -24,6 +24,7 @@
 
   # Test 2: the gradient of the warping function at each location can be computed
   # with the DI interface.
+  k0 = SpectralKernels.compute_k0(cfg)
   test_grads = SpectralKernels.warping_gradients(warp, xpairs, test_params; backend=backend)
   warp_grads = map(xpairs) do xy
     (x, y) = xy
@@ -34,7 +35,7 @@
   # Test 3: derivatives of the kernel with respect to warping parameters.
   test_grads   = SpectralKernels.kernel_warping_gradients(cfg, warp, xpairs, 
                                                           manual_warp_lags,
-                                                          test_params;
+                                                          test_params, k0;
                                                           backend=backend)
   kernel_grads = map(xpairs) do xy
     (x, y) = xy

@@ -4,8 +4,8 @@ using BesselK, HypergeometricFunctions, Printf
 gamma(t) = BesselK._gamma(t)
 
 # Isotropic Matern covariance with parameters p evaluated at distance t
-function matern_cov(t, p; d=1)
-    (phi, alpha, v) = p
+function matern_cov(t, parms; d=1)
+    (phi, alpha, v) = parms
     constant  = pi^(d/2)*phi
     constant /= (2^(v-1))*gamma(v+d/2)*alpha^(2*v)
     arg = alpha*2pi*abs(t)
@@ -14,7 +14,7 @@ function matern_cov(t, p; d=1)
 end
 
 # Matern spectral density
-matern_sdf(w, p; d=1) = p[1]*(p[2]^2 + w^2)^(-p[3] - d/2)
+matern_sdf(w, parms; d=1) = parms[1]*(parms[2]^2 + w^2)^(-parms[3] - d/2)
 
 # Singular Matern kernel with singularity power p=-α
 function sing_matern_cov(t, p, parms; d=1)
@@ -30,4 +30,4 @@ function sing_matern_cov(t, p, parms; d=1)
 
   return out
 end
-sing_matern_cov(t, params) = sing_matern_cov(t-0.0, params[end], params[1:(end-1)])
+sing_matern_cov(t, params; d=1) = sing_matern_cov(t + 1e-30, params[end], params[1:(end-1)], d=d)

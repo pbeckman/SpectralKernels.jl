@@ -50,35 +50,35 @@ end
 # not possible for this code to enforce that joint permutation.
 function kernel_warping_gradients(cfg::AdaptiveKernelConfig{S,dS},
                                   warp::W, raw_xs_pairs,
-                                  warped_lags, warping_params; 
+                                  warped_lags, warping_params, k0; 
                                   backend) where{S,dS,W}
   dcfg    = gen_derivative_config(cfg)
-  dvalues = kernel_values(dcfg, warped_lags)[1]
+  dvalues = kernel_values(dcfg, warped_lags; k0=k0)[1]
   warping_gradients(warp, raw_xs_pairs, warping_params; backend,
-                    multipliers = dvalues)
+                    multipliers=dvalues)
 end
 
 # TODO (cg 2026/02/06 17:25): this does _not_ work for the singularity
 # parameter, which needs to be handled separately.
 function kernel_sdf_derivatives(cfg::AdaptiveKernelConfig{ParametricFunction{S,P},dS},
-                                xs; backend) where{S,P,dS}
+                                xs, k0; backend) where{S,P,dS}
   # get the derivatives of the parametric sdf.
   dsdfs  = derivatives(cfg.f, backend)
   # now for each one, make a new configuration and do the integration.
   derivs = map(dsdfs) do dsdf_dj
     cfgj = gen_new_sdf_config(cfg, dsdf_dj)
-    kernel_values(cfgj, xs; verbose=false)[1]
+    kernel_values(cfgj, xs; k0=k0, verbose=false)[1]
   end
 end
 
-function gen_kernel_jacobian(sm::SpectralModel, params; backend)
+function gen_kernel_jacobian(sm::SpectralModel, params, k0; backend)
   # setup.
   (cfg, warp_lags, raw_pairs, warp_params) = gen_kernel_setup(sm, params)
   # get derivatives with respect to SDF parameters.
-  sdf_derivs = kernel_sdf_derivatives(cfg, warp_lags; backend)
+  sdf_derivs = kernel_sdf_derivatives(cfg, warp_lags, k0; backend)
   # get kernel warping gradients.
   warp_grads = kernel_warping_gradients(cfg, sm.warp, raw_pairs, warp_lags, 
-                                        warp_params; backend)
+                                        warp_params, k0; backend)
   # at present, some slightly ugly but logic bug-resistant indexing to collect
   # everything into a proper Jacobian matrix. The sm.sdf_param_indices and
   # sm.warp_param_indices have all the information we need to re-permute the

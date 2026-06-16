@@ -8,7 +8,8 @@
   cfg    = AdaptiveKernelConfig(psdf; tol=1e-12)
 
   xs     = collect(range(0.01, 3.5, length=30))
-  derivs = SpectralKernels.kernel_sdf_derivatives(cfg, xs; backend=AutoForwardDiff())
+  k0     = SpectralKernels.compute_k0(cfg)
+  derivs = SpectralKernels.kernel_sdf_derivatives(cfg, xs, k0; backend=AutoForwardDiff())
 
   manual_derivs1 = [ForwardDiff.derivative(p1->matern_cov(r, [p1, 0.1, 1.75]), 2.3)
                     for r in xs]

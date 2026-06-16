@@ -52,7 +52,8 @@ function AdaptiveKernelConfig(f; df=nothing, dim=1, alpha=0.0,
     )
 
   AdaptiveKernelConfig(
-    f, df, dim, c, alpha, p, logw, derivative, tol, convergence_criteria, tail, 
+    f, df, dim, c, alpha, p, logw, derivative, tol, 
+    convergence_criteria, tail, 
     quadspec, legrule, jacrule, buffers, SplittingHeap())
 end
 
@@ -69,40 +70,47 @@ function gen_new_sdf_config(cfg::AdaptiveKernelConfig{S,dS}, new_f) where{S,dS}
   AdaptiveKernelConfig(new_f, getfield.(Ref(cfg), fnames[2:end])...)
 end
 
-function compute_k0(config)
-  fun = config.f
-  p   = config.p
-  L   = 1.0
-  nu  = config.dim == 1 ? 0 : config.dim/2 - 1
-  while L^p * abs(fun(L)) > abs(fun(0.0))/2
+function compute_k0(config; params=())
+  f = (w -> config.f(w, params...))
+  p = config.p
+  L = 1.0
+  while L^p * abs(f(L)) > abs(f(0.0))/2
     L *= 2
   end
-  # lim_{r→0} J_ν(2πωr) / r^ν = (πω)^ν / Γ(ν+1)
-  config.c .* quadgk(
-    w -> (pi*w)^nu/gamma(nu+1) * (w*L)^p * (config.logw ? log(w*L) : 1) * fun(w*L) * L, 
-    0.0, Inf, 
-    atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
-  )
+  if config.dim == 1
+    integrand = (w -> (w*L)^p * f(w*L) * L)
+  else
+    # lim_{r→0} J_ν(2πωr) / r^ν = (πω)^ν / Γ(ν+1)
+    nu = config.dim/2 - 1 + config.derivative 
+    integrand = (w -> (pi*w)^nu/gamma(nu+1) * (w*L)^p * f(w*L) * L)
+  end
+  config.c * quadgk(
+    integrand, 0.0, Inf, atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
+    )[1]
 end
 
 quadsz(ac::AdaptiveKernelConfig) = prod(ac.quadspec)
 
 function kernel_values(config::AdaptiveKernelConfig{S,dS},
-                       xs::AbstractVector{Float64}; verbose=false) where{S,dS}
+                    xs::AbstractVector{Float64}; 
+                    k0=compute_k0(config),
+                    verbose=false) where{S,dS}
   uxs = unique(xs)
   verbose && println("Reducing $(length(xs)) to $(length(uxs)) unique lags for evaluation...")
-  (uvals, uerrors) = _kernel_values(config, uxs; verbose=verbose)
+  (uvals, uerrors) = _kernel_values(config, uxs, k0; verbose=verbose)
   val_lookup = Dict(zip(uxs, uvals))
   err_lookup = Dict(zip(uxs, uerrors))
   ([val_lookup[x] for x in xs], [err_lookup[x] for x in xs])
 end
 
 function _kernel_values(config::AdaptiveKernelConfig{S,dS},
-                        xs::AbstractVector{Float64}; verbose=false) where{S,dS}
+                        xs::AbstractVector{Float64}, k0; verbose=false) where{S,dS}
   if !issorted(xs) 
     sp = sortperm(xs)
     ip = invperm(sp)
-    (sorted_kv, sorted_err) = _kernel_values(config, xs[sp]; verbose=verbose)
+    (sorted_kv, sorted_err) = _kernel_values(
+      config, xs[sp], k0; verbose=verbose
+      )
     return (sorted_kv[ip], sorted_err[ip])
   end
   # allocate some full-length buffers to re-use throughout the main loop:
@@ -115,21 +123,21 @@ function _kernel_values(config::AdaptiveKernelConfig{S,dS},
   (a, b) = (0.0, 0.0)
   (c, d) = (NaN, NaN)
 
-  # compute K(0) using QuadGK
-  @timeit TIMER "K(0)" begin
-    (k0, k0_err) = compute_k0(config)
-  end
   # first index containing x > 0 so we know which indices to add panels to
   ix1 = 1
-  if !config.derivative && iszero(xs[1])
+  if iszero(xs[1])
     ix1 = 2
-    ks[1], errs[1] = (k0, k0_err)
+    if config.derivative # don't compute K'(0) as it may be undefined
+      ks[1], errs[1] = (NaN, NaN)
+    else # K(0) has already been computed
+      ks[1], errs[1] = (k0, NaN)
+    end
   end
 
   # main loop:
   while highest_unconv_ix > 0 && xs[highest_unconv_ix] > 0
     # choose panel so that b-a is the distance in w-space for which m points
-    # acheive the Nyquist sampling rate for exp(2πiwx) for all unconverged x
+    # achieve the Nyquist sampling rate for exp(2πiwx) for all unconverged x
     (a, b) = (b, b + quadm / (2*xs[highest_unconv_ix]))
     # print output about panel:
     verbose && print_panel_info(xs, highest_unconv_ix, a, b)
