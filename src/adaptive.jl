@@ -42,6 +42,7 @@ function AdaptiveKernelConfig(f; df=nothing, dim=1, alpha=0.0,
   p = -alpha + (dim == 1 ? 0 : dim/2) + derivative
   c = (dim == 1) ? 2.0 : 2pi
   if derivative; c *= -2pi; end
+  if logw; c *= -1; end
 
   m, k = quadspec                     
   legrule = QuadRule(m; case=:legendre)
@@ -78,11 +79,11 @@ function compute_k0(config; params=())
     L *= 2
   end
   if config.dim == 1
-    integrand = (w -> (w*L)^p * f(w*L) * L)
+    integrand = (w -> (w*L)^p * (config.logw ? log(w*L) : 1) * f(w*L) * L)
   else
     # lim_{r→0} J_ν(2πωr) / r^ν = (πω)^ν / Γ(ν+1)
     nu = config.dim/2 - 1 + config.derivative 
-    integrand = (w -> (pi*w)^nu/gamma(nu+1) * (w*L)^p * f(w*L) * L)
+    integrand = (w -> (pi*w)^nu/gamma(nu+1) * (w*L)^p * (config.logw ? log(w*L) : 1) * f(w*L) * L)
   end
   config.c * quadgk(
     integrand, 0.0, Inf, atol=0.0, rtol=min(1e-8, 1e-2*config.tol)
@@ -131,11 +132,11 @@ function _kernel_values(config::AdaptiveKernelConfig{S,dS},
   ix1 = 1
   if iszero(xs[1])
     ix1 = 2
-    if config.derivative 
+    if config.derivative
       # set K'(0)=0 although it may be undefined
       ks[1], errs[1] = (0, NaN)
     elseif param_derivative 
-      # compute ∂K/∂θ(0) and just use k0=K(0) for error estimation
+      # compute ∂K/∂θ(0) and only use k0=K(0) for error estimation
       dk0 = compute_k0(config)
       ks[1], errs[1] = (dk0, NaN)
     else 

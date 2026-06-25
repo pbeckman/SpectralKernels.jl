@@ -169,40 +169,63 @@ end
 function fourier_integrate_interval(a, b, config, xs, k0, verbose)
   intervalheap = config.splittingheap
   (f, df) = (config.f, config.df)
+  (dim, alpha) = (config.dim, config.alpha)
   push!(intervalheap, (a, b, config.tol))
   I   = zeros(length(xs))
   err = zeros(length(xs))
-  if config.dim == 1
+  if dim == 1
     kernel = config.derivative ? :sin : :cos
   else
-    kernel = config.derivative ? (:J, config.dim/2) : (:J, config.dim/2-1)
+    kernel = config.derivative ? (:J, dim/2) : (:J, dim/2-1)
   end
   while !isempty(intervalheap)
     # take a (sub-)interval:
     (_a, _b, _tol) = pop!(intervalheap)
     # now pick a rule and integrand based on p and where (_a, _b) is:
     if _a == 0.0 && config.p != 0.0
-      # TODO (pb 1/16/26) : implement log singularity for dim > 1
       if config.logw
         # use integration by parts to evaluate the Fourier integral with an
         # additional log(w) singularity
-        I0 = (_b)^(-config.alpha+1)*log(_b)*f(_b)*cos.(2pi*_b*xs)
+        I0 = (_b)^(dim/2+1-alpha)*log(_b)*f(_b)*besselj.(dim/2-1, 2pi*_b*xs)
         @timeit TIMER "panel integral" begin
-          (I1a, I2a) = fourier_integrate_panel(
-            config.buffers, config.legrule, config.jacrule,
-            w -> fun(w) + w*log(w)*df(w),
-            _a, _b, xs, kernel=:cis, p=config.p, 
-            tol=max(1e-15, config.tol/100)
-            )
-          (I1b, I2b) = fourier_integrate_panel(
-            config.buffers, config.legrule, config.jacrule,
-            w -> w*log(w)*f(w),
-            _a, _b, xs, kernel=:cis, p=config.p,
-            tol=max(1e-15, config.tol/100)
-            )
+          if dim == 1
+            (I1a, I2a) = fourier_integrate_panel(
+              config.buffers, config.legrule, config.jacrule,
+              w -> f(w) + w*log(w)*df(w),
+              _a, _b, xs, kernel=:cis, p=config.p, 
+              tol=max(1e-15, config.tol/100)
+              )
+            (I1b, I2b) = fourier_integrate_panel(
+              config.buffers, config.legrule, config.jacrule,
+              w -> w*log(w)*f(w),
+              _a, _b, xs, kernel=:cis, p=config.p,
+              tol=max(1e-15, config.tol/100)
+              )
+
+            I1a .= real.(I1a) # cos kernel
+            I1b .= imag.(I1b) # sin kernel
+            I2a .= real.(I2a) 
+            I2b .= imag.(I2b)
+          elseif dim == 2
+            (I1a, I2a) = fourier_integrate_panel(
+              config.buffers, config.legrule, config.jacrule,
+              w -> f(w) + w*log(w)*df(w),
+              _a, _b, xs, kernel=(:J, Int(dim/2-1)), p=config.p, 
+              tol=max(1e-15, config.tol/100)
+              )
+            (I1b, I2b) = fourier_integrate_panel(
+              config.buffers, config.legrule, config.jacrule,
+              w -> w*log(w)*f(w),
+              _a, _b, xs, kernel=(:J, Int(dim/2)), p=config.p,
+              tol=max(1e-15, config.tol/100)
+              )
+          else
+            error("singularity derivative not implemented in d > 2")
+          end
+
+          I1 = (I0 .- I1a .+ 2pi*xs .* I1b) / (dim-alpha)
+          I2 = (I0 .- I2a .+ 2pi*xs .* I2b) / (dim-alpha)
         end
-        I1 = (I0 .- real(I1a) .+ 2pi*xs .* imag.(I1b)) / (-config.alpha+1)
-        I2 = (I0 .- real(I2a) .+ 2pi*xs .* imag.(I2b)) / (-config.alpha+1)
       else
         @timeit TIMER "panel integral" begin
           (I1, I2) = fourier_integrate_panel(
@@ -226,8 +249,8 @@ function fourier_integrate_interval(a, b, config, xs, k0, verbose)
     # apply the multiplicative prefactor to the computed integrals
     for Ik in (I1, I2)
       Ik .*= config.c
-      if config.dim > 1
-        Ik ./= xs.^(config.dim/2 - 1)
+      if dim > 1
+        Ik ./= xs.^(dim/2 - 1)
       end
     end
     # now analyze the error and decide if you need to split more:
