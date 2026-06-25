@@ -53,7 +53,9 @@ end
               cfg = SpectralKernels.AdaptiveKernelConfig(
                 S, dim=dim, tol=tol, derivative=derivative, alpha=alpha
                 )
-              (integrals, errors) = kernel_values(cfg, xgrid)
+              (integrals, errors) = kernel_values(
+                cfg, xgrid; (derivative ? (; k0=K(0.0)) : (;))...
+                )
               empirical_errors = abs.(integrals - true_values)./K(0.0)
 
               @test all(empirical_errors .<= 10*tol)
@@ -72,7 +74,9 @@ end
         cfg = SpectralKernels.AdaptiveKernelConfig(
           S, df=dS, dim=dim, tol=tol, alpha=alpha, logw=true
           )
-        (integrals, errors) = kernel_values(cfg, xgrid, param_derivative=true)
+        (integrals, errors) = kernel_values(
+          cfg, xgrid, param_derivative=true, k0=K(0.0)
+          )
         empirical_errors = abs.(integrals - true_values)./K(0.0)
 
         @test all(empirical_errors .<= 10*tol)
