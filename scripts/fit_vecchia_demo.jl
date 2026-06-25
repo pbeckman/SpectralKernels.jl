@@ -38,7 +38,7 @@ smodel = SpectralModel(sdf, pts; warp=warp,
 # constructor.
 data         = ones(length(pts)) # a simple placeholder
 spectral_nll = SpectralLikelihood(VecchiaApproximation, smodel, data;
-                                    conditioning=KNNConditioning(15))
+                                  conditioning=KNNConditioning(15))
 
 
 # Now we can do things like this: compute coupled simulations of a normal Matern

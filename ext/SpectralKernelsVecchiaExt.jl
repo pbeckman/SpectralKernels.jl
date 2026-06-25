@@ -35,8 +35,8 @@ module SpectralKernelsVecchiaExt
     rchol(appx, params).U'\z
   end
 
-  function _nll_grad_fish(sl::SpectralLikelihood{S,<:SingletonVecchiaApproximation}, 
-                          params::Vector{Float64}) where{S}
+  function _nll_grad_fish(sl::SpectralLikelihood{S,C}, 
+                          params::Vector{Float64}) where{S,C<:SingletonVecchiaApproximation}
     tag = ForwardDiff.Tag(SpectralLikelihood{S,C}, Float64)
     N   = length(params)
     duals = map(1:length(params)) do j

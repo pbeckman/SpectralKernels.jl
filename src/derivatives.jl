@@ -71,6 +71,9 @@ function kernel_sdf_derivatives(cfg::AdaptiveKernelConfig{ParametricFunction{S,P
   end
 end
 
+# TODO (cg 2026/06/16 17:17): at the moment, tests pass with both perm2 and
+# invperm(perm2) as the input. But obviously only one of those is correct, so
+# should figure out which one and write a test to distinguish.
 function gen_kernel_jacobian(sm::SpectralModel, params, k0; backend)
   # setup.
   (cfg, warp_lags, raw_pairs, warp_params) = gen_kernel_setup(sm, params)
@@ -87,6 +90,6 @@ function gen_kernel_jacobian(sm::SpectralModel, params, k0; backend)
   # sorted as required by kernel_values.
   perm2    = vcat(collect(sm.sdf_param_indices), collect(sm.warp_param_indices))
   J_noperm = hcat(reduce(hcat, sdf_derivs), permutedims(reduce(hcat, warp_grads)))
-  J_noperm[:,perm2] # the final permuted monster.
+  J_noperm[:,invperm(perm2)] # the final permuted monster.
 end
 
