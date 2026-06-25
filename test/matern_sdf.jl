@@ -12,15 +12,16 @@
       
       for derivative in [false, true]
         @testset "(derivative=$(derivative))" begin
-          i0 = 1 # + derivative
           for tol in [1e-4, 1e-8, 1e-10, 1e-12]
-            true_values = derivative ? dK.(xgrid[i0:end]) : K.(xgrid[i0:end])
+            true_values = derivative ? dK.(xgrid) : K.(xgrid)
 
             @testset "(tol=$(tol))" begin
               cfg = SpectralKernels.AdaptiveKernelConfig(
                 S, dim=dim, tol=tol, derivative=derivative
                 )
-              (integrals, errors) = kernel_values(cfg, xgrid[i0:end])
+              (integrals, errors) = kernel_values(
+                cfg, xgrid; (derivative ? (; k0=K(0.0)) : (;))...
+                )
               empirical_errors = abs.(integrals - true_values)./K(0.0)
 
               @test all(empirical_errors .<= 10*tol)
