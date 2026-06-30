@@ -21,7 +21,8 @@ module SpectralKernelsVecchiaExt
     base_cfg = sl.spec
     appx     = SingletonVecchiaApproximation(ZeroMean(), kernel, 
                                              base_cfg.data, base_cfg.pts, 
-                                             base_cfg.condix, base_cfg.perm)
+                                             base_cfg.condix, base_cfg.perm,
+                                             base_cfg.worker_indices)
     appx(params)
   end
 
@@ -31,7 +32,8 @@ module SpectralKernelsVecchiaExt
     base_cfg = sl.spec
     appx     = SingletonVecchiaApproximation(ZeroMean(), kernel, 
                                              base_cfg.data, base_cfg.pts, 
-                                             base_cfg.condix, base_cfg.perm)
+                                             base_cfg.condix, base_cfg.perm,
+                                             base_cfg.worker_indices)
     rchol(appx, params).U'\z
   end
 
@@ -47,7 +49,8 @@ module SpectralKernelsVecchiaExt
     base_cfg = sl.spec
     appx     = SingletonVecchiaApproximation(ZeroMean(), kernel, 
                                              base_cfg.data, base_cfg.pts, 
-                                             base_cfg.condix, base_cfg.perm)
+                                             base_cfg.condix, base_cfg.perm,
+                                             base_cfg.worker_indices)
     Vecchia._nll_grad_fish(appx, duals)
   end
 
