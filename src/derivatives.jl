@@ -71,6 +71,15 @@ function kernel_sdf_derivatives(cfg::AdaptiveKernelConfig{ParametricFunction{S,P
   end
 end
 
+function kernel_singularity_derivative(cfg::AdaptiveKernelConfig{S,dS}, 
+                                       xs, k0, backend) where{S,dS}
+  prep = prepare_derivative(cfg.f, backend, 1.0)
+  df   = ω -> derivative(cfg.f, prep, backend, ω)
+  dalpha_cfg = AdaptiveKernelConfig(cfg.f; df=df, derivative=false,
+                                    dim=cfg.dim, logw=true, tol=cfg.tol)
+  kernel_values(dalpha_cfg, xs; k0, param_derivative=true, verbose=false)[1]
+end
+
 # TODO (cg 2026/06/16 17:17): at the moment, tests pass with both perm2 and
 # invperm(perm2) as the input. But obviously only one of those is correct, so
 # should figure out which one and write a test to distinguish.
@@ -82,6 +91,11 @@ function gen_kernel_jacobian(sm::SpectralModel, params, k0; backend)
   # get kernel warping gradients.
   warp_grads = kernel_warping_gradients(cfg, sm.warp, raw_pairs, warp_lags, 
                                         warp_params, k0; backend)
+  alpha_derivs = if isnothing(sm.singularity_param_index)
+    Float64[]
+  else
+    kernel_singularity_derivative(cfg, warp_lags, k0, backend)
+  end
   # at present, some slightly ugly but logic bug-resistant indexing to collect
   # everything into a proper Jacobian matrix. The sm.sdf_param_indices and
   # sm.warp_param_indices have all the information we need to re-permute the
@@ -90,6 +104,10 @@ function gen_kernel_jacobian(sm::SpectralModel, params, k0; backend)
   # sorted as required by kernel_values.
   perm2    = vcat(collect(sm.sdf_param_indices), collect(sm.warp_param_indices))
   J_noperm = hcat(reduce(hcat, sdf_derivs), permutedims(reduce(hcat, warp_grads)))
+  if !isnothing(sm.singularity_param_index)
+    perm2    = [perm2; sm.singularity_param_index]
+    J_noperm = hcat(J_noperm, alpha_derivs)
+  end
   J_noperm[:,invperm(perm2)] # the final permuted monster.
 end
 

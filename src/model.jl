@@ -70,9 +70,6 @@ end
 # TODO (cg 2026/02/09 13:28): this kernel should maybe have a stationary=true
 # argument to it or something. For points on a lattice, for example, a lot of
 # redundant computations will happen in its current form.
-#
-# TODO (cg 2026/02/09 13:45): this is the one function that I will write a
-# custom rule for.
 function gen_kernel(sm::SpectralModel, params)
   (new_cfg, warp_lags, raw_pairs, _) = gen_kernel_setup(sm, params)
   values = kernel_values(new_cfg, warp_lags; verbose=sm.verbose)[1]

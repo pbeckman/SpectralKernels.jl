@@ -31,3 +31,4 @@ function sing_matern_cov(t, p, parms; d=1)
   return out
 end
 sing_matern_cov(t, params; d=1) = sing_matern_cov(t + 1e-30, params[end], params[1:(end-1)], d=d)
+

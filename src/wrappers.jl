@@ -4,7 +4,7 @@ struct ParametricFunction{F,P}
   params::NTuple{P,Float64}
 end
 
-(psdf::ParametricFunction{F,P})(w::Float64) where{F,P} = psdf.fn(w, psdf.params...)
+(psdf::ParametricFunction{F,P})(w) where{F,P} = psdf.fn(w, psdf.params...)
 
 struct ArgSwap{F,P,J}
   fn::ParametricFunction{F,P} 

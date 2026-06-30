@@ -20,3 +20,4 @@ dev*.jl
 *.snm
 *.toc
 Manifest.toml
+devel
