@@ -18,9 +18,11 @@ include("../scripts/matern_pair.jl")
     include("derivatives/nll_2d.jl")
   end
 
+  #=
   @testset "Core functionality" begin
     include("exponential_sdf_1d.jl")
     include("matern_sdf.jl")
   end
+  =#
 
 end

@@ -3,13 +3,25 @@ struct NoWarping end
 
 (nw::NoWarping)(params, x) = x
 
+Base.@kwdef struct SpectralModel{S,dS,W,P1,P2,L}
+  cfg::AdaptiveKernelConfig{S,dS}
+  warp::W
+  sdf_param_indices::NTuple{P2,Int64}
+  warp_param_indices::NTuple{P1,Int64}
+  singularity_param_index::Union{Nothing, Int64}
+  pts::Vector{L}
+  kernel_index_pairs::Vector{Tuple{Int64, Int64}} # defaults to all unique pairs.
+  verbose::Bool
+end
+
+function dense_index_pairs(pts)
+  allpairs = vec(collect(Iterators.product(eachindex(pts), eachindex(pts)))) 
+  filter!(x->x[1] <= x[2], allpairs)
+  allpairs
+end
+
 """
-    SpectralModel(cfg::AdaptiveKernelConfig,
-                  warp,
-                  warp_param_indices::NTuple{P1,Int64},
-                  sdf_param_indices::NTuple{P2,Int64},
-                  singularity_param_index::Int64,
-                  lags)
+    SpectralModel([TODO: new signature writeup])
 
 An object specifying a model with a covariance function given by
 
@@ -23,43 +35,11 @@ An object specifying a model with a covariance function given by
 and
 
     K_iso(t) = ∫_{ℜ} cos(2 π ω t) cfg.sdf(ω, params[sdf_param_indices]) d ω.
-
-The recommended interface to this object is to write your spectral density in scalar form as
-
-    sdf(ω, param1, ..., paramk) = [...] # your cool model
-    warp(warp_params, h)        = [...] # your warping model (if necessary)
-    psdf = ParametricFunction(sdf, (param1, ..., paramk)) # note the tuple!
-    global_params = vcat(warp_params, sdf_params)
-    cfg = AdaptiveKernelConfig(psdf; tol=1e-12) # also other args available
-    lags = [...] # the lags at which you will want to evaluate your kernel K
-    model = SpectralModel(cfg, warp, tuple((1:length(warp_params))...), 
-                         tuple((length(warp_params)+1):length(sdf_params)...), 
-                         0, lags)
-
 """
-Base.@kwdef struct SpectralModel{S,dS,W,P1,P2,L}
-  cfg::AdaptiveKernelConfig{S,dS}
-  warp::W
-  sdf_param_indices::NTuple{P2,Int64}
-  warp_param_indices::NTuple{P1,Int64}
-  singularity_param_index::Int64
-  pts::Vector{L}
-  kernel_index_pairs::Vector{Tuple{Int64, Int64}} # defaults to all unique pairs.
-  verbose::Bool
-end
-
-function dense_index_pairs(pts)
-  allpairs = vec(collect(Iterators.product(eachindex(pts), eachindex(pts)))) 
-  filter!(x->x[1] <= x[2], allpairs)
-  allpairs
-end
-
-# TODO (cg 2026/02/10 14:38): At present undocumented while we discuss what this
-# front-end constructor should look like.
 function SpectralModel(sdf, pts; warp=NoWarping(),
                        kernel_index_pairs=dense_index_pairs(pts),
                        sdf_param_indices, warp_param_indices=(),
-                       singularity_param_index=0, verbose=false, kwargs...)
+                       singularity_param_index=nothing, verbose=false, kwargs...)
   cfg = AdaptiveKernelConfig(sdf; dim=length(first(pts)), kwargs...)
   SpectralModel(cfg, warp, tuple(sdf_param_indices...),
                 tuple(warp_param_indices...), singularity_param_index,
@@ -74,7 +54,8 @@ function gen_kernel_setup(sm::SpectralModel, params)
   # set up the new integration cfg.
   sdf_params  = [params[j] for j in sm.sdf_param_indices] 
   new_sdf     = ParametricFunction(sm.cfg.f, tuple(sdf_params...))
-  new_cfg     = gen_new_sdf_config(sm.cfg, new_sdf)
+  alpha       = isnothing(sm.singularity_param_index) ? 0.0 : params[sm.singularity_param_index]
+  new_cfg     = gen_new_sdf_config(sm.cfg, new_sdf, alpha)
   # compute the warped points.
   warp_params = [params[j] for j in sm.warp_param_indices]
   warp_pts    = [sm.warp(warp_params, ptj) for ptj in sm.pts]

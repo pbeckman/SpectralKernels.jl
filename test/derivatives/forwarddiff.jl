@@ -13,19 +13,17 @@
 
   cfg    = SpectralKernels.AdaptiveKernelConfig(iso_sdf; tol=1e-12)
   xgrid  = collect(range(0.0, 1.0, length=20))
-  xpairs = vec(collect(Iterators.product(eachindex(xgrid), eachindex(xgrid))))
 
-  model = SpectralModel(;cfg=cfg, warp=warp, sdf_param_indices=(1,),
-                        warp_param_indices=(2,), singularity_param_index=0,
-                        pts=xgrid, kernel_index_pairs=xpairs, verbose=false)
+  model  = SpectralModel(iso_sdf, xgrid; warp, sdf_param_indices=1, 
+                         warp_param_indices=2, verbose=false)
 
   function baseline_kernel_sum(params)
-    sum(jk->kernel(xgrid[jk[1]], xgrid[jk[2]], params), xpairs)
+    sum(xy->kernel(xy[1], xy[2], params), Iterators.product(xgrid, xgrid))
   end
 
   function test_kernel_sum(params)
     gk = SpectralKernels.gen_kernel(model, params)
-    sum(values(gk.store))
+    sum(xy->gk(xy[1], xy[2], params), Iterators.product(xgrid, xgrid))
   end
 
   g_ref  = ForwardDiff.gradient(p->baseline_kernel_sum(p)*sqrt(p[1]*p[2]), test_params)

@@ -13,17 +13,20 @@
 
   cfg    = SpectralKernels.AdaptiveKernelConfig(iso_sdf; tol=1e-12)
   xgrid  = collect(range(0.0, 1.0, length=20))
-  xpairs = vec(collect(Iterators.product(eachindex(xgrid), eachindex(xgrid))))
 
-  model = SpectralModel(;cfg=cfg, warp=warp, sdf_param_indices=(1,),
-                        warp_param_indices=(2,), singularity_param_index=0,
-                        pts=xgrid, kernel_index_pairs=xpairs, verbose=false)
+  model = SpectralModel(iso_sdf, xgrid; warp, sdf_param_indices=1, 
+                        warp_param_indices=2, verbose=false)
 
   k0 = SpectralKernels.compute_k0(cfg; params=test_params[1])
-  J_test = SpectralKernels.gen_kernel_jacobian(model, test_params, k0; backend=backend)
+  J_test = ForwardDiff.jacobian(
+    params -> begin
+      gk = gen_kernel(model, params)
+      [gk(xy[1], xy[2], params) for xy in Iterators.product(xgrid, xgrid)]
+    end,
+    test_params)
 
   J_ref = ForwardDiff.jacobian(
-    params -> [kernel(xgrid[jk[1]], xgrid[jk[2]], params) for jk in xpairs],
+    params -> [kernel(xy[1], xy[2], params) for xy in Iterators.product(xgrid, xgrid)],
     test_params
     )
 
