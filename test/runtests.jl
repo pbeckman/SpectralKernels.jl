@@ -16,6 +16,7 @@ include("../scripts/matern_pair.jl")
     include("derivatives/jacobian.jl")
     include("derivatives/forwarddiff.jl")
     include("derivatives/nll_2d.jl")
+    include("derivatives/nll_2d_sing.jl")
   end
 
   #=

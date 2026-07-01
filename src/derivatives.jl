@@ -75,7 +75,7 @@ function kernel_singularity_derivative(cfg::AdaptiveKernelConfig{S,dS},
                                        xs, k0, backend) where{S,dS}
   prep = prepare_derivative(cfg.f, backend, 1.0)
   df   = ω -> derivative(cfg.f, prep, backend, ω)
-  dalpha_cfg = AdaptiveKernelConfig(cfg.f; df=df, derivative=false,
+  dalpha_cfg = AdaptiveKernelConfig(cfg.f; df=df, derivative=false, alpha=cfg.alpha,
                                     dim=cfg.dim, logw=true, tol=cfg.tol)
   kernel_values(dalpha_cfg, xs; k0, param_derivative=true, verbose=false)[1]
 end
