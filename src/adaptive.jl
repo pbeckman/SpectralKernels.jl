@@ -59,9 +59,8 @@ function AdaptiveKernelConfig(f; df=nothing, dim=1, alpha=0.0,
 end
 
 function gen_derivative_config(cfg::AdaptiveKernelConfig{S,dS}) where{S,dS}
-  cfg.derivative && return cfg
   AdaptiveKernelConfig(cfg.f; df=cfg.df, derivative=true, dim=cfg.dim,
-                       tol=cfg.tol, logw=cfg.logw, tail=cfg.tail,
+                       alpha=cfg.alpha, tol=cfg.tol, logw=cfg.logw, tail=cfg.tail,
                        convergence_criteria=cfg.convergence_criteria,
                        quadspec=cfg.quadspec)
 end
@@ -69,9 +68,7 @@ end
 
 function gen_new_sdf_config(cfg::AdaptiveKernelConfig{S,dS}, new_f, 
                             alpha=cfg.alpha) where{S,dS}
-  fnames = fieldnames(AdaptiveKernelConfig)
-  AdaptiveKernelConfig(new_f, cfg.df, cfg.dim, cfg.c, alpha,
-                       getfield.(Ref(cfg), fnames[6:end])...)
+  AdaptiveKernelConfig(new_f; df=cfg.df, dim=cfg.dim, alpha, tol=cfg.tol)
 end
 
 function compute_k0(config; params=())
